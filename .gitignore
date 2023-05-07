@@ -1,0 +1,8 @@
+.vscode
+*.o
+parser.cc
+parser.hh
+scanner.cc
+location.hh
+test
+test.txt
