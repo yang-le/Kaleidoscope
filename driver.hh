@@ -5,7 +5,8 @@
 #include "parser.hh"
 #include "ast.hh"
 
-#define YY_DECL yy::parser::symbol_type yylex(driver &drv)
+#define YY_DECL \
+    yy::parser::symbol_type yylex(driver &drv)
 
 YY_DECL;
 

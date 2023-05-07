@@ -4,25 +4,14 @@
 #include <vector>
 #include <memory>
 
-#include "llvm/ADT/STLExtras.h"
-#include "llvm/IR/BasicBlock.h"
-#include "llvm/IR/Constants.h"
-#include "llvm/IR/DerivedTypes.h"
-#include "llvm/IR/Function.h"
-#include "llvm/IR/IRBuilder.h"
-#include "llvm/IR/LLVMContext.h"
-#include "llvm/IR/Module.h"
-#include "llvm/IR/Type.h"
-#include "llvm/IR/Verifier.h"
-
-using namespace llvm;
+#include "llvm/IR/Value.h"
 
 class ExprAST
 {
 public:
     virtual ~ExprAST() = default;
 
-    virtual Value *codegen() = 0;
+    virtual llvm::Value *codegen() = 0;
 };
 
 class NumberExprAST : public ExprAST
@@ -32,7 +21,7 @@ class NumberExprAST : public ExprAST
 public:
     NumberExprAST(double Val) : Val(Val) {}
 
-    Value *codegen() override;
+    llvm::Value *codegen() override;
 };
 
 class VariableExprAST : public ExprAST
@@ -42,7 +31,7 @@ class VariableExprAST : public ExprAST
 public:
     VariableExprAST(const std::string &Name) : Name(Name) {}
 
-    Value *codegen() override;
+    llvm::Value *codegen() override;
 };
 
 class BinaryExprAST : public ExprAST
@@ -54,7 +43,7 @@ public:
     BinaryExprAST(char Op, std::unique_ptr<ExprAST> LHS, std::unique_ptr<ExprAST> RHS)
         : Op(Op), LHS(std::move(LHS)), RHS(std::move(RHS)) {}
 
-    Value *codegen() override;
+    llvm::Value *codegen() override;
 };
 
 class CallExprAST : public ExprAST
@@ -66,7 +55,7 @@ public:
     CallExprAST(const std::string &Callee, std::vector<std::unique_ptr<ExprAST>> Args)
         : Callee(Callee), Args(std::move(Args)) {}
 
-    Value *codegen() override;
+    llvm::Value *codegen() override;
 };
 
 class PrototypeAST : public ExprAST
@@ -80,7 +69,7 @@ public:
 
     const std::string &getName() const { return Name; }
 
-    Value *codegen() override;
+    llvm::Value *codegen() override;
 };
 
 class FunctionAST : public ExprAST
@@ -92,7 +81,9 @@ public:
     FunctionAST(std::unique_ptr<PrototypeAST> Proto, std::unique_ptr<ExprAST> Body)
         : Proto(std::move(Proto)), Body(std::move(Body)) {}
 
-    Value *codegen() override;
+    llvm::Value *codegen() override;
 };
 
-void codedump();
+void InitializeModuleAndPassManager();
+
+void InitializeJIT();

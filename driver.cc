@@ -4,6 +4,8 @@
 driver::driver()
     : trace_parsing(false), trace_scanning(false)
 {
+    InitializeJIT();
+    InitializeModuleAndPassManager();
 }
 
 int driver::parse(const std::string &f)
@@ -20,6 +22,6 @@ int driver::parse(const std::string &f)
 
 void driver::codegen()
 {
-    for (auto& expr : ast)
+    for (auto &expr : ast)
         expr->codegen();
 }
