@@ -70,6 +70,8 @@ Value *BinaryExprAST::codegen()
         return Builder->CreateFMul(L, R, "fmul");
     case '/':
         return Builder->CreateFDiv(L, R, "fdiv");
+    case '<':
+        return Builder->CreateUIToFP(Builder->CreateFCmpULT(L, R, "flt"), Type::getDoubleTy(*TheContext), "bool");
     default:
         std::cerr << "Invalid binary operator" << Op << '\n';
         return nullptr;
@@ -175,6 +177,102 @@ Value *FunctionAST::codegen()
 
     TheFunction->eraseFromParent();
     return nullptr;
+}
+
+Value *IfExprAST::codegen()
+{
+    Value *CondV = Cond->codegen();
+    if (!CondV)
+        return nullptr;
+    
+    CondV = Builder->CreateFCmpONE(CondV, ConstantFP::get(*TheContext, APFloat(0.0)), "ifcond");
+
+    Function *TheFunction = Builder->GetInsertBlock()->getParent();
+
+    BasicBlock *ThenBB = BasicBlock::Create(*TheContext, "then", TheFunction);
+    BasicBlock *ElseBB = BasicBlock::Create(*TheContext, "else");
+    BasicBlock *MergeBB = BasicBlock::Create(*TheContext, "ifcont");
+
+    Builder->CreateCondBr(CondV, ThenBB, ElseBB);
+
+    Builder->SetInsertPoint(ThenBB);
+
+    Value *ThenV = Then->codegen();
+    if (!ThenV)
+        return nullptr;
+    
+    Builder->CreateBr(MergeBB);
+    ThenBB = Builder->GetInsertBlock();
+
+    TheFunction->getBasicBlockList().push_back(ElseBB);
+    Builder->SetInsertPoint(ElseBB);
+
+    Value *ElseV = Else->codegen();
+    if (!ElseV)
+        return nullptr;
+    
+    Builder->CreateBr(MergeBB);
+    ElseBB = Builder->GetInsertBlock();
+
+    TheFunction->getBasicBlockList().push_back(MergeBB);
+    Builder->SetInsertPoint(MergeBB);
+
+    PHINode *PN = Builder->CreatePHI(Type::getDoubleTy(*TheContext), 2, "if");
+    PN->addIncoming(ThenV, ThenBB);
+    PN->addIncoming(ElseV, ElseBB);
+    return PN;
+}
+
+Value *ForExprAST::codegen()
+{
+    Value *StartVal = Start->codegen();
+    if (!StartVal)
+        return nullptr;
+    
+    Function *TheFunction = Builder->GetInsertBlock()->getParent();
+    BasicBlock *PreheaderBB = Builder->GetInsertBlock();
+    BasicBlock *LoopBB = BasicBlock::Create(*TheContext, "loop", TheFunction);
+
+    Builder->CreateBr(LoopBB);
+
+    Builder->SetInsertPoint(LoopBB);
+
+    PHINode *Variable = Builder->CreatePHI(Type::getDoubleTy(*TheContext), 2, VarName);
+    Variable->addIncoming(StartVal, PreheaderBB);
+
+    Value *OldVal = NamedValues[VarName];
+    NamedValues[VarName] = Variable;
+
+    if (!Body->codegen())
+        return nullptr;
+    
+    Value *StepVal = Step ? Step->codegen() : ConstantFP::get(*TheContext, APFloat(1.0));
+    if (!StepVal)
+        return nullptr;
+    
+    Value *NextVar = Builder->CreateFAdd(Variable, StepVal, "nextvar");
+
+    Value *EndCond = End->codegen();
+    if (!EndCond)
+        return nullptr;
+    
+    EndCond = Builder->CreateFCmpONE(EndCond, ConstantFP::get(*TheContext, APFloat(0.0)), "loopcond");
+
+    BasicBlock *LoopEndBB = Builder->GetInsertBlock();
+    BasicBlock *AfterBB = BasicBlock::Create(*TheContext, "afterloop", TheFunction);
+
+    Builder->CreateCondBr(EndCond, LoopBB, AfterBB);
+
+    Builder->SetInsertPoint(AfterBB);
+
+    Variable->addIncoming(NextVar, LoopEndBB);
+
+    if (OldVal)
+        NamedValues[VarName] = OldVal;
+    else
+        NamedValues.erase(VarName);
+    
+    return Constant::getNullValue(Type::getDoubleTy(*TheContext));
 }
 
 void InitializeModuleAndPassManager()

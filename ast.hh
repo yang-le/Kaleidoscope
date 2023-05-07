@@ -84,6 +84,29 @@ public:
     llvm::Value *codegen() override;
 };
 
+class IfExprAST : public ExprAST
+{
+    std::unique_ptr<ExprAST> Cond, Then, Else;
+
+public:
+    IfExprAST(std::unique_ptr<ExprAST> Cond, std::unique_ptr<ExprAST> Then, std::unique_ptr<ExprAST> Else)
+        : Cond(std::move(Cond)), Then(std::move(Then)), Else(std::move(Else)) {}
+
+    llvm::Value *codegen() override;
+};
+
+class ForExprAST : public ExprAST
+{
+    std::string VarName;
+    std::unique_ptr<ExprAST> Start, End, Step, Body;
+
+public:
+    ForExprAST(const std::string &VarName, std::unique_ptr<ExprAST> Start, std::unique_ptr<ExprAST> End, std::unique_ptr<ExprAST> Step, std::unique_ptr<ExprAST> Body)
+        : Start(std::move(Start)), End(std::move(End)), Step(std::move(Step)), Body(std::move(Body)) {}
+
+    llvm::Value *codegen() override;
+};
+
 void InitializeModuleAndPassManager();
 
 void InitializeJIT();
