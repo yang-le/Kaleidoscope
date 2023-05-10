@@ -156,12 +156,12 @@ class ForExprAST : public ExprAST
 
 public:
     ForExprAST(const std::string &VarName, std::unique_ptr<ExprAST> Start, std::unique_ptr<ExprAST> End, std::unique_ptr<ExprAST> Step, std::unique_ptr<ExprAST> Body)
-        : Start(std::move(Start)), End(std::move(End)), Step(std::move(Step)), Body(std::move(Body)) {}
+        : VarName(VarName), Start(std::move(Start)), End(std::move(End)), Step(std::move(Step)), Body(std::move(Body)) {}
 
     const std::string &getVarName() const { return VarName; }
     const ExprAST &getStart() const { return *Start; }
     const ExprAST &getEnd() const { return *End; }
-    bool isStepValid() const { return Step.get(); }
+    bool isStepValid() const { return !!Step; }
     const ExprAST &getStep() const { return *Step; }
     const ExprAST &getBody() const { return *Body; }
 
