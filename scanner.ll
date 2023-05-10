@@ -5,9 +5,9 @@
 
 %option noyywrap nounput noinput batch debug
 
-id      [a-zA-Z][a-zA-Z_0-9]*
-num     [0-9.]+
-blank   [ \t\r]
+id      [[:alpha:]][[:alnum:]_]*
+num     [[:digit:].]+
+blank   [[:blank:]\r]
 
 %{
     // Code run each time a pattern is matched.
@@ -30,6 +30,8 @@ blank   [ \t\r]
 "else"                  return yy::parser::make_ELSE(loc);
 "for"                   return yy::parser::make_FOR(loc);
 "in"                    return yy::parser::make_IN(loc);
+"unary"                 return yy::parser::make_UNARY(loc);
+"binary"                return yy::parser::make_BINARY(loc);
 {id}                    return yy::parser::make_ID(yytext, loc);
 {num}                   return yy::parser::make_NUM(atof(yytext), loc);
 #.*$                    /* comment */
@@ -43,6 +45,7 @@ blank   [ \t\r]
 "="                     return yy::parser::make_ASSIGN(loc);
 ","                     return yy::parser::make_COMMA(loc);
 "<"                     return yy::parser::make_LT(loc);
+[[:punct:]]             return yy::parser::make_PUNCT(yytext[0], loc);
 .                       throw yy::parser::syntax_error(loc, "invalid character: " + std::string(yytext));
 <<EOF>>                 return yy::parser::make_END(loc);
 %%

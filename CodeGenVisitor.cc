@@ -1,8 +1,7 @@
-#include "ast.hh"
+#include "CodeGenVisitor.hh"
 
 #include <iostream>
 
-#include "KaleidoscopeJIT.h"
 #include "llvm/ADT/APFloat.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/IR/BasicBlock.h"
@@ -24,122 +23,116 @@
 using namespace llvm;
 using namespace llvm::orc;
 
-namespace
+void CodeGenVisitor::visit(const NumberExprAST &n)
 {
-    std::unique_ptr<LLVMContext> TheContext;
-    std::unique_ptr<Module> TheModule;
-    std::unique_ptr<IRBuilder<>> Builder;
-    std::map<std::string, Value *> NamedValues;
-    std::unique_ptr<legacy::FunctionPassManager> TheFPM;
-    std::unique_ptr<KaleidoscopeJIT> TheJIT;
-    std::map<std::string, std::unique_ptr<PrototypeAST>> FunctionProtos;
-    ExitOnError ExitOnErr;
+    Value_ = ConstantFP::get(*TheContext, APFloat(n.getVal()));
 }
 
-Value *NumberExprAST::codegen()
+void CodeGenVisitor::visit(const VariableExprAST &v)
 {
-    return ConstantFP::get(*TheContext, APFloat(Val));
-}
-
-Value *VariableExprAST::codegen()
-{
-    Value *V = NamedValues[Name];
-    if (!V)
+    Value_ = NamedValues[v.getName()];
+    if (!Value_)
     {
-        std::cerr << "Unknown variable name: " << Name << '\n';
-        return nullptr;
+        std::cerr << "Unknown variable name: " << v.getName() << '\n';
     }
-    return V;
 }
 
-Value *BinaryExprAST::codegen()
+void CodeGenVisitor::visit(const BinaryExprAST &b)
 {
-    Value *L = LHS->codegen();
-    Value *R = RHS->codegen();
+    visit(b.getLHS());
+    Value *L = Value_;
+
+    visit(b.getRHS());
+    Value *R = Value_;
 
     if (!L || !R)
-        return nullptr;
+    {
+        Value_ = nullptr;
+        return;
+    }
 
-    switch (Op)
+    switch (b.getOp())
     {
     case '+':
-        return Builder->CreateFAdd(L, R, "fadd");
+        Value_ = Builder->CreateFAdd(L, R, "fadd");
+        return;
     case '-':
-        return Builder->CreateFSub(L, R, "fsub");
+        Value_ = Builder->CreateFSub(L, R, "fsub");
+        return;
     case '*':
-        return Builder->CreateFMul(L, R, "fmul");
+        Value_ = Builder->CreateFMul(L, R, "fmul");
+        return;
     case '/':
-        return Builder->CreateFDiv(L, R, "fdiv");
+        Value_ = Builder->CreateFDiv(L, R, "fdiv");
+        return;
     case '<':
-        return Builder->CreateUIToFP(Builder->CreateFCmpULT(L, R, "flt"), Type::getDoubleTy(*TheContext), "bool");
+        Value_ = Builder->CreateUIToFP(Builder->CreateFCmpULT(L, R, "flt"), Type::getDoubleTy(*TheContext), "bool");
+        return;
     default:
-        std::cerr << "Invalid binary operator" << Op << '\n';
-        return nullptr;
+        break;
     }
+
+    Function *F = getFunction(std::string("binary") + b.getOp());
+    assert(F && "binary operator not found!");
+
+    Value_ = Builder->CreateCall(F, {L, R}, "binop");
 }
 
-Function *getFunction(const std::string &Name)
+void CodeGenVisitor::visit(const CallExprAST &c)
 {
-    if (auto *F = TheModule->getFunction(Name))
-        return F;
-
-    auto FI = FunctionProtos.find(Name);
-    if (FI != FunctionProtos.end())
-        return (Function *)FI->second->codegen();
-
-    return nullptr;
-}
-
-Value *CallExprAST::codegen()
-{
-    Function *CalleeF = getFunction(Callee);
+    Function *CalleeF = getFunction(c.getCallee());
     if (!CalleeF)
     {
-        std::cerr << "Unknown function: " << Callee << '\n';
-        return nullptr;
+        std::cerr << "Unknown function: " << c.getCallee() << '\n';
+        Value_ = nullptr;
+        return;
     }
 
-    if (CalleeF->arg_size() != Args.size())
+    if (CalleeF->arg_size() != c.getArgsSize())
     {
-        std::cerr << Args.size() << " arguments passed, expect " << CalleeF->arg_size() << '\n';
-        return nullptr;
+        std::cerr << c.getArgsSize() << " arguments passed, expect " << CalleeF->arg_size() << '\n';
+        Value_ = nullptr;
+        return;
     }
 
     std::vector<Value *> ArgsV;
-    for (unsigned i = 0, e = Args.size(); i < e; ++i)
+    for (unsigned i = 0, e = c.getArgsSize(); i < e; ++i)
     {
-        Value *V = Args[i]->codegen();
-        if (!V)
-            return nullptr;
-        ArgsV.push_back(V);
+        visit(c.getArgs(i));
+        if (!Value_)
+            return;
+        ArgsV.push_back(Value_);
     }
 
-    return Builder->CreateCall(CalleeF, ArgsV, "call");
+    Value_ = Builder->CreateCall(CalleeF, ArgsV, "call");
 }
 
-Value *PrototypeAST::codegen()
+void CodeGenVisitor::visit(const PrototypeAST &p)
 {
-    std::vector<Type *> Doubles(Args.size(), Type::getDoubleTy(*TheContext));
+    std::vector<Type *> Doubles(p.getArgsSize(), Type::getDoubleTy(*TheContext));
     FunctionType *FT = FunctionType::get(Type::getDoubleTy(*TheContext), Doubles, false);
-    Function *F = Function::Create(FT, Function::ExternalLinkage, Name, *TheModule);
+    Function *F = Function::Create(FT, Function::ExternalLinkage, p.getName(), *TheModule);
 
     unsigned Idx = 0;
     for (auto &Arg : F->args())
-        Arg.setName(Args[Idx++]);
-    
-    F->print(errs());
+        Arg.setName(p.getArgs(Idx++));
 
-    return F;
+    // F->print(errs());
+
+    Value_ = F;
 }
 
-Value *FunctionAST::codegen()
+void CodeGenVisitor::visit(const FunctionAST &f)
 {
-    auto &P = *Proto;
-    FunctionProtos[Proto->getName()] = std::move(Proto);
+    auto &Proto = f.getProto();
+    FunctionProtos_.emplace(Proto.getName(), Proto);
 
-    Function *TheFunction = getFunction(P.getName());
+    Function *TheFunction = getFunction(Proto.getName());
     if (!TheFunction)
-        return nullptr;
+    {
+        Value_ = nullptr;
+        return;
+    }
 
     BasicBlock *BB = BasicBlock::Create(*TheContext, "entry", TheFunction);
     Builder->SetInsertPoint(BB);
@@ -148,20 +141,21 @@ Value *FunctionAST::codegen()
     for (auto &Arg : TheFunction->args())
         NamedValues[std::string(Arg.getName())] = &Arg;
 
-    if (Value *RetVal = Body->codegen())
+    visit(f.getBody());
+    if (Value_)
     {
-        Builder->CreateRet(RetVal);
+        Builder->CreateRet(Value_);
         verifyFunction(*TheFunction);
         TheFPM->run(*TheFunction);
 
-        TheFunction->print(errs());
+        // TheFunction->print(errs());
 
         auto RT = TheJIT->getMainJITDylib().createResourceTracker();
         auto TSM = ThreadSafeModule(std::move(TheModule), std::move(TheContext));
         ExitOnErr(TheJIT->addModule(std::move(TSM), RT));
         InitializeModuleAndPassManager();
 
-        if ("__anon_expr" == P.getName())
+        if ("__anon_expr" == Proto.getName())
         {
             auto ExprSymbol = ExitOnErr(TheJIT->lookup("__anon_expr"));
             assert(ExprSymbol && "Function not found");
@@ -172,19 +166,21 @@ Value *FunctionAST::codegen()
             ExitOnErr(RT->remove());
         }
 
-        return TheFunction;
+        Value_ = TheFunction;
+        return;
     }
 
     TheFunction->eraseFromParent();
-    return nullptr;
+    Value_ = nullptr;
 }
 
-Value *IfExprAST::codegen()
+void CodeGenVisitor::visit(const IfExprAST &i)
 {
-    Value *CondV = Cond->codegen();
+    visit(i.getCond());
+    Value *CondV = Value_;
     if (!CondV)
-        return nullptr;
-    
+        return;
+
     CondV = Builder->CreateFCmpONE(CondV, ConstantFP::get(*TheContext, APFloat(0.0)), "ifcond");
 
     Function *TheFunction = Builder->GetInsertBlock()->getParent();
@@ -197,20 +193,22 @@ Value *IfExprAST::codegen()
 
     Builder->SetInsertPoint(ThenBB);
 
-    Value *ThenV = Then->codegen();
+    visit(i.getThen());
+    Value *ThenV = Value_;
     if (!ThenV)
-        return nullptr;
-    
+        return;
+
     Builder->CreateBr(MergeBB);
     ThenBB = Builder->GetInsertBlock();
 
     TheFunction->getBasicBlockList().push_back(ElseBB);
     Builder->SetInsertPoint(ElseBB);
 
-    Value *ElseV = Else->codegen();
+    visit(i.getElse());
+    Value *ElseV = Value_;
     if (!ElseV)
-        return nullptr;
-    
+        return;
+
     Builder->CreateBr(MergeBB);
     ElseBB = Builder->GetInsertBlock();
 
@@ -220,15 +218,16 @@ Value *IfExprAST::codegen()
     PHINode *PN = Builder->CreatePHI(Type::getDoubleTy(*TheContext), 2, "if");
     PN->addIncoming(ThenV, ThenBB);
     PN->addIncoming(ElseV, ElseBB);
-    return PN;
+    Value_ = PN;
 }
 
-Value *ForExprAST::codegen()
+void CodeGenVisitor::visit(const ForExprAST &f)
 {
-    Value *StartVal = Start->codegen();
+    visit(f.getStart());
+    Value *StartVal = Value_;
     if (!StartVal)
-        return nullptr;
-    
+        return;
+
     Function *TheFunction = Builder->GetInsertBlock()->getParent();
     BasicBlock *PreheaderBB = Builder->GetInsertBlock();
     BasicBlock *LoopBB = BasicBlock::Create(*TheContext, "loop", TheFunction);
@@ -237,25 +236,37 @@ Value *ForExprAST::codegen()
 
     Builder->SetInsertPoint(LoopBB);
 
-    PHINode *Variable = Builder->CreatePHI(Type::getDoubleTy(*TheContext), 2, VarName);
+    PHINode *Variable = Builder->CreatePHI(Type::getDoubleTy(*TheContext), 2, f.getVarName());
     Variable->addIncoming(StartVal, PreheaderBB);
 
-    Value *OldVal = NamedValues[VarName];
-    NamedValues[VarName] = Variable;
+    Value *OldVal = NamedValues[f.getVarName()];
+    NamedValues[f.getVarName()] = Variable;
 
-    if (!Body->codegen())
-        return nullptr;
-    
-    Value *StepVal = Step ? Step->codegen() : ConstantFP::get(*TheContext, APFloat(1.0));
+    visit(f.getBody());
+    if (!Value_)
+        return;
+
+    Value *StepVal;
+    if (f.isStepValid())
+    {
+        visit(f.getStep());
+        StepVal = Value_;
+    }
+    else
+    {
+        StepVal = ConstantFP::get(*TheContext, APFloat(1.0));
+    }
+
     if (!StepVal)
-        return nullptr;
-    
+        return;
+
     Value *NextVar = Builder->CreateFAdd(Variable, StepVal, "nextvar");
 
-    Value *EndCond = End->codegen();
+    visit(f.getEnd());
+    Value *EndCond = Value_;
     if (!EndCond)
-        return nullptr;
-    
+        return;
+
     EndCond = Builder->CreateFCmpONE(EndCond, ConstantFP::get(*TheContext, APFloat(0.0)), "loopcond");
 
     BasicBlock *LoopEndBB = Builder->GetInsertBlock();
@@ -268,14 +279,31 @@ Value *ForExprAST::codegen()
     Variable->addIncoming(NextVar, LoopEndBB);
 
     if (OldVal)
-        NamedValues[VarName] = OldVal;
+        NamedValues[f.getVarName()] = OldVal;
     else
-        NamedValues.erase(VarName);
-    
-    return Constant::getNullValue(Type::getDoubleTy(*TheContext));
+        NamedValues.erase(f.getVarName());
+
+    Value_ = Constant::getNullValue(Type::getDoubleTy(*TheContext));
 }
 
-void InitializeModuleAndPassManager()
+Function *CodeGenVisitor::getFunction(const std::string &Name)
+{
+    if (auto *F = TheModule->getFunction(Name))
+        return F;
+
+    auto FI = FunctionProtos_.find(Name);
+    if (FI != FunctionProtos_.end())
+    {
+        Value *temp = Value_;
+        visit(FI->second);
+        std::swap(temp, Value_);
+        return (Function *)temp;
+    }
+
+    return nullptr;
+}
+
+void CodeGenVisitor::InitializeModuleAndPassManager()
 {
     TheContext = std::make_unique<LLVMContext>();
     TheModule = std::make_unique<Module>("My Cool JIT", *TheContext);
@@ -293,7 +321,7 @@ void InitializeModuleAndPassManager()
     TheFPM->doInitialization();
 }
 
-void InitializeJIT()
+void CodeGenVisitor::InitializeJIT()
 {
     InitializeNativeTarget();
     InitializeNativeTargetAsmPrinter();

@@ -43,9 +43,12 @@
   ELSE    "else"
   FOR     "for"
   IN      "in"
+  UNARY   "unary"
+  BINARY  "binary"
 
 %token <std::string> ID "identifier"
 %token <double> NUM "number"
+%token <char> PUNCT "punct"
 
 %nterm <std::unique_ptr<ExprAST>> expr stmt
 %nterm <std::unique_ptr<PrototypeAST>> proto
@@ -82,6 +85,7 @@ expr:
     | expr "*" expr                                 { $$ = std::make_unique<BinaryExprAST>('*', std::move($1), std::move($3)); }
     | expr "/" expr                                 { $$ = std::make_unique<BinaryExprAST>('/', std::move($1), std::move($3)); }
     | expr "<" expr                                 { $$ = std::make_unique<BinaryExprAST>('<', std::move($1), std::move($3)); }
+    | expr PUNCT expr                               { $$ = std::make_unique<BinaryExprAST>($2, std::move($1), std::move($3)); }
     | NUM                                           { $$ = std::make_unique<NumberExprAST>(std::move($1)); }
     | ID                                            { $$ = std::make_unique<VariableExprAST>($1); }
     | ID "(" expr_list ")"                          { $$ = std::make_unique<CallExprAST>($1, std::move($3)); }
@@ -104,6 +108,8 @@ id_list:
 
 proto:
     ID "(" id_list ")"                              { $$ = std::make_unique<PrototypeAST>($1, $3); }
+    | BINARY PUNCT "(" ID ID ")"                    { $$ = std::make_unique<PrototypeAST>(std::string("binary") + $2, std::vector<std::string>{$4, $5}, true); }
+    | UNARY PUNCT "(" ID ")"                        { $$ = std::make_unique<PrototypeAST>(std::string("unary") + $2, std::vector<std::string>{$4}, true); }
     ;
 %%
 
