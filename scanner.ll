@@ -32,6 +32,7 @@ blank   [[:blank:]\r]
 "in"                    return yy::parser::make_IN(loc);
 "unary"                 return yy::parser::make_UNARY(loc);
 "binary"                return yy::parser::make_BINARY(loc);
+"var"                   return yy::parser::make_VAR(loc);
 {id}                    return yy::parser::make_ID(yytext, loc);
 {num}                   return yy::parser::make_NUM(atof(yytext), loc);
 #.*$                    /* comment */

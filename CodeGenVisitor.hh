@@ -15,7 +15,7 @@ class CodeGenVisitor : public ExprASTVisitor
     std::unique_ptr<llvm::LLVMContext> TheContext;
     std::unique_ptr<llvm::Module> TheModule;
     std::unique_ptr<llvm::IRBuilder<>> Builder;
-    std::map<std::string, llvm::Value *> NamedValues;
+    std::map<std::string, llvm::AllocaInst *> NamedValues;
     std::unique_ptr<llvm::legacy::FunctionPassManager> TheFPM;
     std::unique_ptr<llvm::orc::KaleidoscopeJIT> TheJIT;
     llvm::ExitOnError ExitOnErr;
@@ -23,13 +23,17 @@ class CodeGenVisitor : public ExprASTVisitor
     llvm::Value *Value_;
     std::map<std::string, const PrototypeAST &> FunctionProtos_;
 
+    bool dump_;
+
     llvm::Function *getFunction(const std::string &Name);
+    llvm::AllocaInst *CreateEntryBlockAlloca(llvm::Function *TheFunction, const std::string &VarName);
 
     void InitializeModuleAndPassManager();
     void InitializeJIT();
 
 public:
-    CodeGenVisitor()
+    CodeGenVisitor(bool dump_ = false)
+        : dump_(dump_)
     {
         InitializeJIT();
         InitializeModuleAndPassManager();
@@ -44,4 +48,6 @@ public:
     virtual void visit(const FunctionAST &f) override;
     virtual void visit(const IfExprAST &i) override;
     virtual void visit(const ForExprAST &f) override;
+    virtual void visit(const AssignExprAST &f) override;
+    virtual void visit(const VarExprAST &a) override;
 };

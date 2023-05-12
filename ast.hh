@@ -14,6 +14,8 @@ class PrototypeAST;
 class FunctionAST;
 class IfExprAST;
 class ForExprAST;
+class AssignExprAST;
+class VarExprAST;
 
 class ExprASTVisitor
 {
@@ -27,6 +29,8 @@ public:
     virtual void visit(const FunctionAST &f) = 0;
     virtual void visit(const IfExprAST &i) = 0;
     virtual void visit(const ForExprAST &f) = 0;
+    virtual void visit(const AssignExprAST &a) = 0;
+    virtual void visit(const VarExprAST &a) = 0;
 };
 
 class ExprAST
@@ -163,6 +167,36 @@ public:
     const ExprAST &getEnd() const { return *End; }
     bool isStepValid() const { return !!Step; }
     const ExprAST &getStep() const { return *Step; }
+    const ExprAST &getBody() const { return *Body; }
+
+    virtual void accept(ExprASTVisitor &v) const override { v.visit(*this); }
+};
+
+class AssignExprAST : public ExprAST
+{
+    std::string VarName;
+    std::unique_ptr<ExprAST> RHS;
+
+public:
+    AssignExprAST(const std::string &VarName, std::unique_ptr<ExprAST> RHS)
+        : VarName(VarName), RHS(std::move(RHS)) {}
+
+    const std::string &getVarName() const { return VarName; }
+    const ExprAST &getRHS() const { return *RHS; }
+
+    virtual void accept(ExprASTVisitor &v) const override { v.visit(*this); }
+};
+
+class VarExprAST : public ExprAST
+{
+    std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> Vars;
+    std::unique_ptr<ExprAST> Body;
+
+public:
+    VarExprAST(std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> Vars, std::unique_ptr<ExprAST> Body)
+        : Vars(std::move(Vars)), Body(std::move(Body)) {}
+
+    const std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>>& getVars() const { return Vars; }
     const ExprAST &getBody() const { return *Body; }
 
     virtual void accept(ExprASTVisitor &v) const override { v.visit(*this); }

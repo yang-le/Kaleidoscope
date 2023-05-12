@@ -45,6 +45,7 @@
   IN      "in"
   UNARY   "unary"
   BINARY  "binary"
+  VAR     "var"
 
 %token <std::string> ID "identifier"
 %token <double> NUM "number"
@@ -54,6 +55,7 @@
 %nterm <std::unique_ptr<PrototypeAST>> proto
 %nterm <std::vector<std::unique_ptr<ExprAST>>> expr_list stmt_list
 %nterm <std::vector<std::string>> id_list
+%nterm <std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>>> var_list;
 
 /* %printer { yyo << $$; } <*> */
 
@@ -92,6 +94,15 @@ expr:
     | IF expr THEN expr ELSE expr                   { $$ = std::make_unique<IfExprAST>(std::move($2), std::move($4), std::move($6)); }
     | FOR ID "=" expr "," expr IN expr              { $$ = std::make_unique<ForExprAST>($2, std::move($4), std::move($6), nullptr, std::move($8)); }
     | FOR ID "=" expr "," expr "," expr IN expr     { $$ = std::make_unique<ForExprAST>($2, std::move($4), std::move($6), std::move($8), std::move($10)); }
+    | ID "=" expr                                   { $$ = std::make_unique<AssignExprAST>($1, std::move($3)); }
+    | VAR var_list IN expr                          { $$ = std::make_unique<VarExprAST>(std::move($2), std::move($4)); }
+    ;
+
+var_list:
+    ID                                              { $$ = std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>>(); $$.emplace_back($1, nullptr); }
+    | ID "=" expr                                   { $$ = std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>>(); $$.emplace_back($1, std::move($3)); }
+    | var_list "," ID                               { $$.swap($1); $$.emplace_back($3, nullptr); }
+    | var_list "," ID "=" expr                      { $$.swap($1); $$.emplace_back($3, std::move($5)); }
     ;
 
 expr_list:
@@ -107,7 +118,7 @@ id_list:
     ;
 
 proto:
-    ID "(" id_list ")"                              { $$ = std::make_unique<PrototypeAST>($1, $3); }
+    ID "(" id_list ")"                              { $$ = std::make_unique<PrototypeAST>($1, std::move($3)); }
     | BINARY PUNCT "(" ID ID ")"                    { $$ = std::make_unique<PrototypeAST>(std::string("binary") + $2, std::vector<std::string>{$4, $5}, true); }
     | UNARY PUNCT "(" ID ")"                        { $$ = std::make_unique<PrototypeAST>(std::string("unary") + $2, std::vector<std::string>{$4}, true); }
     ;

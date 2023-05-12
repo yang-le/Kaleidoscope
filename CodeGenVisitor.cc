@@ -19,6 +19,7 @@
 #include "llvm/Transforms/InstCombine/InstCombine.h"
 #include "llvm/Transforms/Scalar.h"
 #include "llvm/Transforms/Scalar/GVN.h"
+#include "llvm/Transforms/Utils.h"
 
 using namespace llvm;
 using namespace llvm::orc;
@@ -30,11 +31,11 @@ void CodeGenVisitor::visit(const NumberExprAST &n)
 
 void CodeGenVisitor::visit(const VariableExprAST &v)
 {
-    Value_ = NamedValues[v.getName()];
-    if (!Value_)
-    {
+    AllocaInst *A = NamedValues[v.getName()];
+    if (!A)
         std::cerr << "Unknown variable name: " << v.getName() << '\n';
-    }
+
+    Value_ = Builder->CreateLoad(A->getAllocatedType(), A, v.getName());
 }
 
 void CodeGenVisitor::visit(const BinaryExprAST &b)
@@ -117,7 +118,10 @@ void CodeGenVisitor::visit(const PrototypeAST &p)
     for (auto &Arg : F->args())
         Arg.setName(p.getArgs(Idx++));
 
-    // F->print(errs());
+    if (dump_)
+        F->print(errs());
+
+    FunctionProtos_.emplace(p.getName(), p);
 
     Value_ = F;
 }
@@ -139,7 +143,11 @@ void CodeGenVisitor::visit(const FunctionAST &f)
 
     NamedValues.clear();
     for (auto &Arg : TheFunction->args())
-        NamedValues[std::string(Arg.getName())] = &Arg;
+    {
+        AllocaInst *Alloca = CreateEntryBlockAlloca(TheFunction, std::string(Arg.getName()));
+        Builder->CreateStore(&Arg, Alloca);
+        NamedValues[std::string(Arg.getName())] = Alloca;
+    }
 
     visit(f.getBody());
     if (Value_)
@@ -148,7 +156,8 @@ void CodeGenVisitor::visit(const FunctionAST &f)
         verifyFunction(*TheFunction);
         TheFPM->run(*TheFunction);
 
-        // TheFunction->print(errs());
+        if (dump_)
+            TheFunction->print(errs());
 
         auto RT = TheJIT->getMainJITDylib().createResourceTracker();
         auto TSM = ThreadSafeModule(std::move(TheModule), std::move(TheContext));
@@ -223,24 +232,25 @@ void CodeGenVisitor::visit(const IfExprAST &i)
 
 void CodeGenVisitor::visit(const ForExprAST &f)
 {
+    Function *TheFunction = Builder->GetInsertBlock()->getParent();
+
+    AllocaInst *Alloca = CreateEntryBlockAlloca(TheFunction, f.getVarName());
+
     visit(f.getStart());
     Value *StartVal = Value_;
     if (!StartVal)
         return;
 
-    Function *TheFunction = Builder->GetInsertBlock()->getParent();
-    BasicBlock *PreheaderBB = Builder->GetInsertBlock();
+    Builder->CreateStore(StartVal, Alloca);
+
     BasicBlock *LoopBB = BasicBlock::Create(*TheContext, "loop", TheFunction);
 
     Builder->CreateBr(LoopBB);
 
     Builder->SetInsertPoint(LoopBB);
 
-    PHINode *Variable = Builder->CreatePHI(Type::getDoubleTy(*TheContext), 2, f.getVarName());
-    Variable->addIncoming(StartVal, PreheaderBB);
-
-    Value *OldVal = NamedValues[f.getVarName()];
-    NamedValues[f.getVarName()] = Variable;
+    AllocaInst *OldVal = NamedValues[f.getVarName()];
+    NamedValues[f.getVarName()] = Alloca;
 
     visit(f.getBody());
     if (!Value_)
@@ -251,21 +261,23 @@ void CodeGenVisitor::visit(const ForExprAST &f)
     {
         visit(f.getStep());
         StepVal = Value_;
+
+        if (!StepVal)
+            return;
     }
     else
     {
         StepVal = ConstantFP::get(*TheContext, APFloat(1.0));
     }
 
-    if (!StepVal)
-        return;
-
-    Value *NextVar = Builder->CreateFAdd(Variable, StepVal, "nextvar");
-
     visit(f.getEnd());
     Value *EndCond = Value_;
     if (!EndCond)
         return;
+
+    Value *CurVar = Builder->CreateLoad(Alloca->getAllocatedType(), Alloca, f.getVarName());
+    Value *NextVar = Builder->CreateFAdd(CurVar, StepVal, "nextvar");
+    Builder->CreateStore(NextVar, Alloca);
 
     EndCond = Builder->CreateFCmpONE(EndCond, ConstantFP::get(*TheContext, APFloat(0.0)), "loopcond");
 
@@ -276,14 +288,62 @@ void CodeGenVisitor::visit(const ForExprAST &f)
 
     Builder->SetInsertPoint(AfterBB);
 
-    Variable->addIncoming(NextVar, LoopEndBB);
-
     if (OldVal)
         NamedValues[f.getVarName()] = OldVal;
     else
         NamedValues.erase(f.getVarName());
 
     Value_ = Constant::getNullValue(Type::getDoubleTy(*TheContext));
+}
+
+void CodeGenVisitor::visit(const AssignExprAST &f)
+{
+    visit(f.getRHS());
+    if (!Value_)
+        return;
+
+    AllocaInst *A = NamedValues[f.getVarName()];
+    if (!A)
+        std::cerr << "Unknown variable name: " << f.getVarName() << '\n';
+
+    Builder->CreateStore(Value_, A);
+
+    Value_ = A;
+}
+
+void CodeGenVisitor::visit(const VarExprAST &a)
+{
+    std::vector<AllocaInst *> OldBindings;
+
+    Function *TheFunction = Builder->GetInsertBlock()->getParent();
+
+    for (auto &[VarName, Init] : a.getVars())
+    {
+        if (Init)
+        {
+            visit(*Init);
+            if (!Value_)
+                return;
+        }
+        else
+        {
+            Value_ = ConstantFP::get(*TheContext, APFloat(0.0));
+        }
+
+        AllocaInst *Alloca = CreateEntryBlockAlloca(TheFunction, VarName);
+        Builder->CreateStore(Value_, Alloca);
+
+        OldBindings.push_back(NamedValues[VarName]);
+        NamedValues[VarName] = Alloca;
+    }
+
+    visit(a.getBody());
+    if (!Value_)
+        return;
+
+    unsigned i = 0;
+    for (auto &[VarName, _] : a.getVars())
+        NamedValues[VarName] = OldBindings[i++];
 }
 
 Function *CodeGenVisitor::getFunction(const std::string &Name)
@@ -303,6 +363,12 @@ Function *CodeGenVisitor::getFunction(const std::string &Name)
     return nullptr;
 }
 
+AllocaInst *CodeGenVisitor::CreateEntryBlockAlloca(Function *TheFunction, const std::string &VarName)
+{
+    IRBuilder<> TmpB(&TheFunction->getEntryBlock(), TheFunction->getEntryBlock().begin());
+    return TmpB.CreateAlloca(Type::getDoubleTy(*TheContext), nullptr, VarName);
+}
+
 void CodeGenVisitor::InitializeModuleAndPassManager()
 {
     TheContext = std::make_unique<LLVMContext>();
@@ -313,6 +379,7 @@ void CodeGenVisitor::InitializeModuleAndPassManager()
 
     TheFPM = std::make_unique<legacy::FunctionPassManager>(TheModule.get());
 
+    TheFPM->add(createPromoteMemoryToRegisterPass());
     TheFPM->add(createInstructionCombiningPass());
     TheFPM->add(createReassociatePass());
     TheFPM->add(createGVNPass());
