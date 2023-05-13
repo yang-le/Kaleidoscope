@@ -120,9 +120,6 @@ void CodeGenVisitor::visit(const PrototypeAST &p)
     for (auto &Arg : F->args())
         Arg.setName(p.getArgs(Idx++));
 
-    if (dump_)
-        F->print(errs());
-
     FunctionProtos_.emplace(p.getName(), p);
 
     Value_ = F;
@@ -157,9 +154,6 @@ void CodeGenVisitor::visit(const FunctionAST &f)
         Builder->CreateRet(Value_);
         verifyFunction(*TheFunction);
         TheFPM->run(*TheFunction);
-
-        if (dump_)
-            TheFunction->print(errs());
 
         Value_ = TheFunction;
         return;

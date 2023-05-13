@@ -76,27 +76,27 @@ stmt_list:
     ;
 
 stmt:
-    DEF proto expr                                  { $$ = std::make_unique<FunctionAST>(std::move($2), std::move($3)); }
+    DEF proto expr                                  { $$ = std::make_unique<FunctionAST>(@$, std::move($2), std::move($3)); }
     | EXTERN proto                                  { $$ = std::move($2); }
-    | expr                                          { $$ = std::make_unique<FunctionAST>(std::make_unique<PrototypeAST>("__anon_expr", std::vector<std::string>()), std::move($1));}
+    | expr                                          { $$ = std::make_unique<FunctionAST>(@$, std::make_unique<PrototypeAST>(@$, "__anon_expr", std::vector<std::string>()), std::move($1));}
     ;
 
 expr:
     "(" expr ")"                                    { $$ = std::move($2); }
-    | expr "+" expr                                 { $$ = std::make_unique<BinaryExprAST>('+', std::move($1), std::move($3)); }
-    | expr "-" expr                                 { $$ = std::make_unique<BinaryExprAST>('-', std::move($1), std::move($3)); }
-    | expr "*" expr                                 { $$ = std::make_unique<BinaryExprAST>('*', std::move($1), std::move($3)); }
-    | expr "/" expr                                 { $$ = std::make_unique<BinaryExprAST>('/', std::move($1), std::move($3)); }
-    | expr "<" expr                                 { $$ = std::make_unique<BinaryExprAST>('<', std::move($1), std::move($3)); }
-    | expr PUNCT expr                               { $$ = std::make_unique<BinaryExprAST>($2, std::move($1), std::move($3)); }
-    | NUM                                           { $$ = std::make_unique<NumberExprAST>(std::move($1)); }
-    | ID                                            { $$ = std::make_unique<VariableExprAST>($1); }
-    | ID "(" expr_list ")"                          { $$ = std::make_unique<CallExprAST>($1, std::move($3)); }
-    | IF expr THEN expr ELSE expr                   { $$ = std::make_unique<IfExprAST>(std::move($2), std::move($4), std::move($6)); }
-    | FOR ID "=" expr "," expr IN expr              { $$ = std::make_unique<ForExprAST>($2, std::move($4), std::move($6), nullptr, std::move($8)); }
-    | FOR ID "=" expr "," expr "," expr IN expr     { $$ = std::make_unique<ForExprAST>($2, std::move($4), std::move($6), std::move($8), std::move($10)); }
-    | ID "=" expr                                   { $$ = std::make_unique<AssignExprAST>($1, std::move($3)); }
-    | VAR var_list IN expr                          { $$ = std::make_unique<VarExprAST>(std::move($2), std::move($4)); }
+    | expr "+" expr                                 { $$ = std::make_unique<BinaryExprAST>(@$, '+', std::move($1), std::move($3)); }
+    | expr "-" expr                                 { $$ = std::make_unique<BinaryExprAST>(@$, '-', std::move($1), std::move($3)); }
+    | expr "*" expr                                 { $$ = std::make_unique<BinaryExprAST>(@$, '*', std::move($1), std::move($3)); }
+    | expr "/" expr                                 { $$ = std::make_unique<BinaryExprAST>(@$, '/', std::move($1), std::move($3)); }
+    | expr "<" expr                                 { $$ = std::make_unique<BinaryExprAST>(@$, '<', std::move($1), std::move($3)); }
+    | expr PUNCT expr                               { $$ = std::make_unique<BinaryExprAST>(@$, $2, std::move($1), std::move($3)); }
+    | NUM                                           { $$ = std::make_unique<NumberExprAST>(@$, std::move($1)); }
+    | ID                                            { $$ = std::make_unique<VariableExprAST>(@$, $1); }
+    | ID "(" expr_list ")"                          { $$ = std::make_unique<CallExprAST>(@$, $1, std::move($3)); }
+    | IF expr THEN expr ELSE expr                   { $$ = std::make_unique<IfExprAST>(@$, std::move($2), std::move($4), std::move($6)); }
+    | FOR ID "=" expr "," expr IN expr              { $$ = std::make_unique<ForExprAST>(@$, $2, std::move($4), std::move($6), nullptr, std::move($8)); }
+    | FOR ID "=" expr "," expr "," expr IN expr     { $$ = std::make_unique<ForExprAST>(@$, $2, std::move($4), std::move($6), std::move($8), std::move($10)); }
+    | ID "=" expr                                   { $$ = std::make_unique<AssignExprAST>(@$, $1, std::move($3)); }
+    | VAR var_list IN expr                          { $$ = std::make_unique<VarExprAST>(@$, std::move($2), std::move($4)); }
     ;
 
 var_list:
@@ -119,9 +119,9 @@ id_list:
     ;
 
 proto:
-    ID "(" id_list ")"                              { $$ = std::make_unique<PrototypeAST>($1, std::move($3)); }
-    | BINARY PUNCT "(" ID ID ")"                    { $$ = std::make_unique<PrototypeAST>(std::string("binary") + $2, std::vector<std::string>{$4, $5}); }
-    | UNARY PUNCT "(" ID ")"                        { $$ = std::make_unique<PrototypeAST>(std::string("unary") + $2, std::vector<std::string>{$4}); }
+    ID "(" id_list ")"                              { $$ = std::make_unique<PrototypeAST>(@$, $1, std::move($3)); }
+    | BINARY PUNCT "(" ID ID ")"                    { $$ = std::make_unique<PrototypeAST>(@$, std::string("binary") + $2, std::vector<std::string>{$4, $5}); }
+    | UNARY PUNCT "(" ID ")"                        { $$ = std::make_unique<PrototypeAST>(@$, std::string("unary") + $2, std::vector<std::string>{$4}); }
     ;
 %%
 

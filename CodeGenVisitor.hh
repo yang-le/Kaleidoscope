@@ -17,14 +17,11 @@ class CodeGenVisitor : public ExprASTVisitor
 
     std::map<std::string, const PrototypeAST &> FunctionProtos_;
 
-    bool dump_;
-
     llvm::Function *getFunction(const std::string &Name);
     llvm::AllocaInst *CreateEntryBlockAlloca(llvm::Function *TheFunction, const std::string &VarName);
 
 public:
-    CodeGenVisitor(bool dump_ = false)
-        : dump_(dump_)
+    CodeGenVisitor()
     {
         InitializeModuleAndPassManager();
     }
@@ -40,6 +37,11 @@ public:
     virtual void visit(const ForExprAST &f) override;
     virtual void visit(const AssignExprAST &f) override;
     virtual void visit(const VarExprAST &a) override;
+
+    void dump()
+    {
+        TheModule->print(llvm::errs(), nullptr);
+    }
 
 protected:
     std::unique_ptr<llvm::LLVMContext> TheContext;

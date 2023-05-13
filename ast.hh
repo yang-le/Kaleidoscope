@@ -4,6 +4,8 @@
 #include <string>
 #include <vector>
 #include <memory>
+#include <ostream>
+#include "location.hh"
 
 class ExprAST;
 class NumberExprAST;
@@ -37,10 +39,17 @@ public:
 
 class ExprAST
 {
+    yy::location Loc;
+
 public:
+    ExprAST(yy::location Loc)
+        : Loc(Loc) {}
+
     virtual ~ExprAST() = default;
 
     virtual void accept(ExprASTVisitor &v) const = 0;
+
+    virtual std::ostream &dump(std::ostream &out, int ind) const;
 };
 
 class NumberExprAST : public ExprAST
@@ -48,11 +57,14 @@ class NumberExprAST : public ExprAST
     double Val;
 
 public:
-    NumberExprAST(double Val) : Val(Val) {}
+    NumberExprAST(yy::location Loc, double Val)
+        : ExprAST(Loc), Val(Val) {}
 
     double getVal() const { return Val; }
 
     virtual void accept(ExprASTVisitor &v) const override { v.visit(*this); }
+
+    virtual std::ostream &dump(std::ostream &out, int ind) const override;
 };
 
 class VariableExprAST : public ExprAST
@@ -60,11 +72,14 @@ class VariableExprAST : public ExprAST
     std::string Name;
 
 public:
-    VariableExprAST(const std::string &Name) : Name(Name) {}
+    VariableExprAST(yy::location Loc, const std::string &Name)
+        : ExprAST(Loc), Name(Name) {}
 
     const std::string &getName() const { return Name; }
 
     virtual void accept(ExprASTVisitor &v) const override { v.visit(*this); }
+
+    virtual std::ostream &dump(std::ostream &out, int ind) const override;
 };
 
 class BinaryExprAST : public ExprAST
@@ -73,14 +88,16 @@ class BinaryExprAST : public ExprAST
     std::unique_ptr<ExprAST> LHS, RHS;
 
 public:
-    BinaryExprAST(char Op, std::unique_ptr<ExprAST> LHS, std::unique_ptr<ExprAST> RHS)
-        : Op(Op), LHS(std::move(LHS)), RHS(std::move(RHS)) {}
+    BinaryExprAST(yy::location Loc, char Op, std::unique_ptr<ExprAST> LHS, std::unique_ptr<ExprAST> RHS)
+        : ExprAST(Loc), Op(Op), LHS(std::move(LHS)), RHS(std::move(RHS)) {}
 
     char getOp() const { return Op; }
     const ExprAST &getLHS() const { return *LHS; }
     const ExprAST &getRHS() const { return *RHS; }
 
     virtual void accept(ExprASTVisitor &v) const override { v.visit(*this); }
+
+    virtual std::ostream &dump(std::ostream &out, int ind) const override;
 };
 
 class CallExprAST : public ExprAST
@@ -89,14 +106,16 @@ class CallExprAST : public ExprAST
     std::vector<std::unique_ptr<ExprAST>> Args;
 
 public:
-    CallExprAST(const std::string &Callee, std::vector<std::unique_ptr<ExprAST>> Args)
-        : Callee(Callee), Args(std::move(Args)) {}
+    CallExprAST(yy::location Loc, const std::string &Callee, std::vector<std::unique_ptr<ExprAST>> Args)
+        : ExprAST(Loc), Callee(Callee), Args(std::move(Args)) {}
 
     const std::string &getCallee() const { return Callee; }
     const ExprAST &getArgs(std::size_t i) const { return *Args[i]; }
     size_t getArgsSize() const { return Args.size(); }
 
     virtual void accept(ExprASTVisitor &v) const override { v.visit(*this); }
+
+    virtual std::ostream &dump(std::ostream &out, int ind) const override;
 };
 
 class PrototypeAST : public ExprAST
@@ -105,14 +124,16 @@ class PrototypeAST : public ExprAST
     std::vector<std::string> Args;
 
 public:
-    PrototypeAST(const std::string &Name, std::vector<std::string> Args)
-        : Name(Name), Args(std::move(Args)) {}
+    PrototypeAST(yy::location Loc, const std::string &Name, std::vector<std::string> Args)
+        : ExprAST(Loc), Name(Name), Args(std::move(Args)) {}
 
     const std::string &getName() const { return Name; }
     const std::string &getArgs(std::size_t i) const { return Args[i]; }
     size_t getArgsSize() const { return Args.size(); }
 
     virtual void accept(ExprASTVisitor &v) const override { v.visit(*this); }
+
+    virtual std::ostream &dump(std::ostream &out, int ind) const override;
 };
 
 class FunctionAST : public ExprAST
@@ -121,13 +142,15 @@ class FunctionAST : public ExprAST
     std::unique_ptr<ExprAST> Body;
 
 public:
-    FunctionAST(std::unique_ptr<PrototypeAST> Proto, std::unique_ptr<ExprAST> Body)
-        : Proto(std::move(Proto)), Body(std::move(Body)) {}
+    FunctionAST(yy::location Loc, std::unique_ptr<PrototypeAST> Proto, std::unique_ptr<ExprAST> Body)
+        : ExprAST(Loc), Proto(std::move(Proto)), Body(std::move(Body)) {}
 
     const PrototypeAST &getProto() const { return *Proto; }
     const ExprAST &getBody() const { return *Body; }
 
     virtual void accept(ExprASTVisitor &v) const override { v.visit(*this); }
+
+    virtual std::ostream &dump(std::ostream &out, int ind) const override;
 };
 
 class IfExprAST : public ExprAST
@@ -135,14 +158,16 @@ class IfExprAST : public ExprAST
     std::unique_ptr<ExprAST> Cond, Then, Else;
 
 public:
-    IfExprAST(std::unique_ptr<ExprAST> Cond, std::unique_ptr<ExprAST> Then, std::unique_ptr<ExprAST> Else)
-        : Cond(std::move(Cond)), Then(std::move(Then)), Else(std::move(Else)) {}
+    IfExprAST(yy::location Loc, std::unique_ptr<ExprAST> Cond, std::unique_ptr<ExprAST> Then, std::unique_ptr<ExprAST> Else)
+        : ExprAST(Loc), Cond(std::move(Cond)), Then(std::move(Then)), Else(std::move(Else)) {}
 
     const ExprAST &getCond() const { return *Cond; }
     const ExprAST &getThen() const { return *Then; }
     const ExprAST &getElse() const { return *Else; }
 
     virtual void accept(ExprASTVisitor &v) const override { v.visit(*this); }
+
+    virtual std::ostream &dump(std::ostream &out, int ind) const override;
 };
 
 class ForExprAST : public ExprAST
@@ -151,8 +176,8 @@ class ForExprAST : public ExprAST
     std::unique_ptr<ExprAST> Start, End, Step, Body;
 
 public:
-    ForExprAST(const std::string &VarName, std::unique_ptr<ExprAST> Start, std::unique_ptr<ExprAST> End, std::unique_ptr<ExprAST> Step, std::unique_ptr<ExprAST> Body)
-        : VarName(VarName), Start(std::move(Start)), End(std::move(End)), Step(std::move(Step)), Body(std::move(Body)) {}
+    ForExprAST(yy::location Loc, const std::string &VarName, std::unique_ptr<ExprAST> Start, std::unique_ptr<ExprAST> End, std::unique_ptr<ExprAST> Step, std::unique_ptr<ExprAST> Body)
+        : ExprAST(Loc), VarName(VarName), Start(std::move(Start)), End(std::move(End)), Step(std::move(Step)), Body(std::move(Body)) {}
 
     const std::string &getVarName() const { return VarName; }
     const ExprAST &getStart() const { return *Start; }
@@ -162,6 +187,8 @@ public:
     const ExprAST &getBody() const { return *Body; }
 
     virtual void accept(ExprASTVisitor &v) const override { v.visit(*this); }
+
+    virtual std::ostream &dump(std::ostream &out, int ind) const override;
 };
 
 class AssignExprAST : public ExprAST
@@ -170,13 +197,15 @@ class AssignExprAST : public ExprAST
     std::unique_ptr<ExprAST> RHS;
 
 public:
-    AssignExprAST(const std::string &VarName, std::unique_ptr<ExprAST> RHS)
-        : VarName(VarName), RHS(std::move(RHS)) {}
+    AssignExprAST(yy::location Loc, const std::string &VarName, std::unique_ptr<ExprAST> RHS)
+        : ExprAST(Loc), VarName(VarName), RHS(std::move(RHS)) {}
 
     const std::string &getVarName() const { return VarName; }
     const ExprAST &getRHS() const { return *RHS; }
 
     virtual void accept(ExprASTVisitor &v) const override { v.visit(*this); }
+
+    virtual std::ostream &dump(std::ostream &out, int ind) const override;
 };
 
 class VarExprAST : public ExprAST
@@ -185,11 +214,13 @@ class VarExprAST : public ExprAST
     std::unique_ptr<ExprAST> Body;
 
 public:
-    VarExprAST(std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> Vars, std::unique_ptr<ExprAST> Body)
-        : Vars(std::move(Vars)), Body(std::move(Body)) {}
+    VarExprAST(yy::location Loc, std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> Vars, std::unique_ptr<ExprAST> Body)
+        : ExprAST(Loc), Vars(std::move(Vars)), Body(std::move(Body)) {}
 
     const std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> &getVars() const { return Vars; }
     const ExprAST &getBody() const { return *Body; }
 
     virtual void accept(ExprASTVisitor &v) const override { v.visit(*this); }
+
+    virtual std::ostream &dump(std::ostream &out, int ind) const override;
 };

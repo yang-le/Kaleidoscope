@@ -16,7 +16,7 @@ all: $(BASE)
 %.o: %.cc
 	$(CXX) $(CXXFLAGS) -c -o $@ $<
 
-$(BASE): parser.o scanner.o CodeGenVisitor.o JITCodeGenVisitor.o NativeCodeGenVisitor.o driver.o $(BASE).o
+$(BASE): parser.o scanner.o ast.o CodeGenVisitor.o JITCodeGenVisitor.o NativeCodeGenVisitor.o driver.o $(BASE).o
 	$(CXX) $(CXXFLAGS) `llvm-config-12 --ldflags` -o $@ $^ `llvm-config-12 --libs`
 
 $(BASE).o: parser.hh
