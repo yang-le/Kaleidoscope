@@ -3,8 +3,7 @@ BISON = bison
 FLEX = flex
 
 CXXFLAGS = -std=c++17 -I/usr/lib/llvm-12/include
-#CXXFLAGS += -g
-#CXXFLAGS += -g -fsanitize=leak -fsanitize=address
+CXXFLAGS += -g -fsanitize=leak -fsanitize=address
 
 all: $(BASE)
 
@@ -17,7 +16,7 @@ all: $(BASE)
 %.o: %.cc
 	$(CXX) $(CXXFLAGS) -c -o $@ $<
 
-$(BASE): parser.o scanner.o CodeGenVisitor.o driver.o $(BASE).o
+$(BASE): parser.o scanner.o CodeGenVisitor.o JITCodeGenVisitor.o NativeCodeGenVisitor.o driver.o $(BASE).o
 	$(CXX) $(CXXFLAGS) `llvm-config-12 --ldflags` -o $@ $^ `llvm-config-12 --libs`
 
 $(BASE).o: parser.hh

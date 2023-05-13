@@ -20,6 +20,8 @@ class VarExprAST;
 class ExprASTVisitor
 {
 public:
+    virtual ~ExprASTVisitor() = default;
+
     virtual void visit(const ExprAST &e) = 0;
     virtual void visit(const NumberExprAST &n) = 0;
     virtual void visit(const VariableExprAST &v) = 0;

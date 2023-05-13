@@ -14,7 +14,6 @@
 #include "llvm/IR/Module.h"
 #include "llvm/IR/Type.h"
 #include "llvm/IR/Verifier.h"
-#include "llvm/Support/TargetSelect.h"
 #include "llvm/Target/TargetMachine.h"
 #include "llvm/Transforms/InstCombine/InstCombine.h"
 #include "llvm/Transforms/Scalar.h"
@@ -22,7 +21,6 @@
 #include "llvm/Transforms/Utils.h"
 
 using namespace llvm;
-using namespace llvm::orc;
 
 void CodeGenVisitor::visit(const NumberExprAST &n)
 {
@@ -159,22 +157,6 @@ void CodeGenVisitor::visit(const FunctionAST &f)
         if (dump_)
             TheFunction->print(errs());
 
-        auto RT = TheJIT->getMainJITDylib().createResourceTracker();
-        auto TSM = ThreadSafeModule(std::move(TheModule), std::move(TheContext));
-        ExitOnErr(TheJIT->addModule(std::move(TSM), RT));
-        InitializeModuleAndPassManager();
-
-        if ("__anon_expr" == Proto.getName())
-        {
-            auto ExprSymbol = ExitOnErr(TheJIT->lookup("__anon_expr"));
-            assert(ExprSymbol && "Function not found");
-
-            double (*FP)() = (double (*)())(intptr_t)ExprSymbol.getAddress();
-            std::cout << "Evaluated to " << FP() << '\n';
-
-            ExitOnErr(RT->remove());
-        }
-
         Value_ = TheFunction;
         return;
     }
@@ -233,7 +215,6 @@ void CodeGenVisitor::visit(const IfExprAST &i)
 void CodeGenVisitor::visit(const ForExprAST &f)
 {
     Function *TheFunction = Builder->GetInsertBlock()->getParent();
-
     AllocaInst *Alloca = CreateEntryBlockAlloca(TheFunction, f.getVarName());
 
     visit(f.getStart());
@@ -244,9 +225,7 @@ void CodeGenVisitor::visit(const ForExprAST &f)
     Builder->CreateStore(StartVal, Alloca);
 
     BasicBlock *LoopBB = BasicBlock::Create(*TheContext, "loop", TheFunction);
-
     Builder->CreateBr(LoopBB);
-
     Builder->SetInsertPoint(LoopBB);
 
     AllocaInst *OldVal = NamedValues[f.getVarName()];
@@ -373,7 +352,6 @@ void CodeGenVisitor::InitializeModuleAndPassManager()
 {
     TheContext = std::make_unique<LLVMContext>();
     TheModule = std::make_unique<Module>("My Cool JIT", *TheContext);
-    TheModule->setDataLayout(TheJIT->getDataLayout());
 
     Builder = std::make_unique<IRBuilder<>>(*TheContext);
 
@@ -386,13 +364,4 @@ void CodeGenVisitor::InitializeModuleAndPassManager()
     TheFPM->add(createCFGSimplificationPass());
 
     TheFPM->doInitialization();
-}
-
-void CodeGenVisitor::InitializeJIT()
-{
-    InitializeNativeTarget();
-    InitializeNativeTargetAsmPrinter();
-    InitializeNativeTargetAsmParser();
-
-    TheJIT = ExitOnErr(KaleidoscopeJIT::Create());
 }
