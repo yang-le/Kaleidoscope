@@ -59,6 +59,10 @@
 
 /* %printer { yyo << $$; } <*> */
 
+%left "<"
+%left "+" "-"
+%left "*" "/"
+
 %%
 %start prog;
 prog:
@@ -68,7 +72,7 @@ prog:
 stmt_list:
     stmt                                            { $$ = std::vector<std::unique_ptr<ExprAST>>(); $$.push_back(std::move($1)); }
     | stmt_list stmt                                { $$.swap($1); $$.push_back(std::move($2)); }
-    |                                               { $$ = std::vector<std::unique_ptr<ExprAST>>(); }
+    | %empty                                        { $$ = std::vector<std::unique_ptr<ExprAST>>(); }
     ;
 
 stmt:
@@ -77,9 +81,6 @@ stmt:
     | expr                                          { $$ = std::make_unique<FunctionAST>(std::make_unique<PrototypeAST>("__anon_expr", std::vector<std::string>()), std::move($1));}
     ;
 
-%left "<";
-%left "+" "-";
-%left "*" "/";
 expr:
     "(" expr ")"                                    { $$ = std::move($2); }
     | expr "+" expr                                 { $$ = std::make_unique<BinaryExprAST>('+', std::move($1), std::move($3)); }
@@ -108,19 +109,19 @@ var_list:
 expr_list:
     expr                                            { $$ = std::vector<std::unique_ptr<ExprAST>>(); $$.push_back(std::move($1)); }
     | expr_list "," expr                            { $$.swap($1); $$.push_back(std::move($3)); }
-    |                                               { $$ = std::vector<std::unique_ptr<ExprAST>>(); }
+    | %empty                                        { $$ = std::vector<std::unique_ptr<ExprAST>>(); }
     ;
 
 id_list:
     ID                                              { $$ = std::vector<std::string>{$1}; }
     | id_list ID                                    { $$.swap($1); $$.push_back($2); }
-    |                                               { $$ = std::vector<std::string>(); }
+    | %empty                                        { $$ = std::vector<std::string>(); }
     ;
 
 proto:
     ID "(" id_list ")"                              { $$ = std::make_unique<PrototypeAST>($1, std::move($3)); }
-    | BINARY PUNCT "(" ID ID ")"                    { $$ = std::make_unique<PrototypeAST>(std::string("binary") + $2, std::vector<std::string>{$4, $5}, true); }
-    | UNARY PUNCT "(" ID ")"                        { $$ = std::make_unique<PrototypeAST>(std::string("unary") + $2, std::vector<std::string>{$4}, true); }
+    | BINARY PUNCT "(" ID ID ")"                    { $$ = std::make_unique<PrototypeAST>(std::string("binary") + $2, std::vector<std::string>{$4, $5}); }
+    | UNARY PUNCT "(" ID ")"                        { $$ = std::make_unique<PrototypeAST>(std::string("unary") + $2, std::vector<std::string>{$4}); }
     ;
 %%
 

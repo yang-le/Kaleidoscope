@@ -20,7 +20,8 @@ void NativeCodeGenVisitor::InitializeNative()
     auto TargetTriple = sys::getDefaultTargetTriple();
     auto Target = TargetRegistry::lookupTarget(TargetTriple, Error);
 
-    if (!Target) {
+    if (!Target)
+    {
         errs() << Error;
         return;
     }
@@ -41,7 +42,8 @@ void NativeCodeGenVisitor::emit(const std::string &filename) const
     std::error_code EC;
     raw_fd_ostream dest(filename, EC, sys::fs::OF_None);
 
-    if (EC) {
+    if (EC)
+    {
         errs() << "Cound not open file: " << EC.message();
         return;
     }
@@ -49,7 +51,8 @@ void NativeCodeGenVisitor::emit(const std::string &filename) const
     legacy::PassManager pass;
     auto FileType = CGFT_ObjectFile;
 
-    if (TargetMachine->addPassesToEmitFile(pass, dest, nullptr, FileType)) {
+    if (TargetMachine->addPassesToEmitFile(pass, dest, nullptr, FileType))
+    {
         errs() << "TargetMachine can't emit a file of this type";
         return;
     }

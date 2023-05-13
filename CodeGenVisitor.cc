@@ -31,7 +31,11 @@ void CodeGenVisitor::visit(const VariableExprAST &v)
 {
     AllocaInst *A = NamedValues[v.getName()];
     if (!A)
+    {
         std::cerr << "Unknown variable name: " << v.getName() << '\n';
+        Value_ = nullptr;
+        return;
+    }
 
     Value_ = Builder->CreateLoad(A->getAllocatedType(), A, v.getName());
 }

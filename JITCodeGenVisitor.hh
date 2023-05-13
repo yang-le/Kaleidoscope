@@ -3,9 +3,10 @@
 #include "CodeGenVisitor.hh"
 #include "KaleidoscopeJIT.h"
 
-class JITCodeGenVisitor : public CodeGenVisitor {
+class JITCodeGenVisitor : public CodeGenVisitor
+{
     std::unique_ptr<llvm::orc::KaleidoscopeJIT> TheJIT;
-    
+
     void InitializeJIT();
 
 public:

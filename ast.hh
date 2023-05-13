@@ -103,24 +103,14 @@ class PrototypeAST : public ExprAST
 {
     std::string Name;
     std::vector<std::string> Args;
-    bool IsOperator;
 
 public:
-    PrototypeAST(const std::string &Name, std::vector<std::string> Args, bool IsOperator = false)
-        : Name(Name), Args(std::move(Args)), IsOperator(IsOperator) {}
+    PrototypeAST(const std::string &Name, std::vector<std::string> Args)
+        : Name(Name), Args(std::move(Args)) {}
 
     const std::string &getName() const { return Name; }
     const std::string &getArgs(std::size_t i) const { return Args[i]; }
     size_t getArgsSize() const { return Args.size(); }
-
-    bool isUnaryOp() const { return IsOperator && Args.size() == 1; }
-    bool isBinaryOp() const { return IsOperator && Args.size() == 2; }
-
-    char getOperatorName() const
-    {
-        assert(isUnaryOp() || isBinaryOp());
-        return Name[Name.size() - 1];
-    }
 
     virtual void accept(ExprASTVisitor &v) const override { v.visit(*this); }
 };
@@ -198,7 +188,7 @@ public:
     VarExprAST(std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> Vars, std::unique_ptr<ExprAST> Body)
         : Vars(std::move(Vars)), Body(std::move(Body)) {}
 
-    const std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>>& getVars() const { return Vars; }
+    const std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> &getVars() const { return Vars; }
     const ExprAST &getBody() const { return *Body; }
 
     virtual void accept(ExprASTVisitor &v) const override { v.visit(*this); }

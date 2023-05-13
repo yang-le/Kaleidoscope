@@ -10,7 +10,8 @@ using namespace llvm::orc;
 void JITCodeGenVisitor::visit(const FunctionAST &f)
 {
     CodeGenVisitor::visit(f);
-    if (Value_) {
+    if (Value_)
+    {
         auto RT = TheJIT->getMainJITDylib().createResourceTracker();
         auto TSM = ThreadSafeModule(std::move(TheModule), std::move(TheContext));
         ExitOnErr(TheJIT->addModule(std::move(TSM), RT));

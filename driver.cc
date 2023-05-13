@@ -23,8 +23,16 @@ int driver::parse(const std::string &f)
 
 void driver::codegen()
 {
-    NativeCodeGenVisitor v;
+    CodeGenVisitor v(true);
     for (auto &expr : ast)
         v.visit(*expr);
-    v.emit("output.o");
+
+    JITCodeGenVisitor j;
+    for (auto &expr : ast)
+        j.visit(*expr);
+
+    NativeCodeGenVisitor n;
+    for (auto &expr : ast)
+        n.visit(*expr);
+    n.emit("output.o");
 }
