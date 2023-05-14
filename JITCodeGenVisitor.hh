@@ -1,7 +1,7 @@
 #pragma once
 
 #include "CodeGenVisitor.hh"
-#include "KaleidoscopeJIT.h"
+#include "KaleidoscopeJIT.hh"
 
 class JITCodeGenVisitor : public CodeGenVisitor
 {
