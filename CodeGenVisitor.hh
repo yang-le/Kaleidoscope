@@ -6,6 +6,7 @@
 #include "llvm/Support/Error.h"
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/Module.h"
+#include "llvm/IR/DIBuilder.h"
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/LegacyPassManager.h"
 
@@ -20,8 +21,23 @@ class CodeGenVisitor : public ExprASTVisitor
     llvm::Function *getFunction(const std::string &Name);
     llvm::AllocaInst *CreateEntryBlockAlloca(llvm::Function *TheFunction, const std::string &VarName);
 
+    bool debug_;
+    std::unique_ptr<llvm::DIBuilder> DBuilder;
+
+    struct DebugInfo
+    {
+        llvm::DICompileUnit *TheCU;
+        llvm::DIType *DblTy;
+        std::vector<llvm::DIScope *> LexicalBlocks;
+    } KSDbgInfo;
+
+    llvm::DIType *getDoubleTy();
+    void emitLocation(const ExprAST *AST);
+    llvm::DISubroutineType *CreateFunctionType(unsigned NumArgs);
+
 public:
-    CodeGenVisitor()
+    CodeGenVisitor(bool debug = false)
+        : debug_(debug)
     {
         InitializeModuleAndPassManager();
     }
@@ -38,8 +54,10 @@ public:
     virtual void visit(const AssignExprAST &f) override;
     virtual void visit(const VarExprAST &a) override;
 
-    void dump()
+    void dump() const
     {
+        if (debug_)
+            DBuilder->finalize();
         TheModule->print(llvm::errs(), nullptr);
     }
 

@@ -3,7 +3,8 @@
 #include "CodeGenVisitor.hh"
 #include "llvm/Target/TargetMachine.h"
 
-class NativeCodeGenVisitor : public CodeGenVisitor {
+class NativeCodeGenVisitor : public CodeGenVisitor
+{
     llvm::TargetMachine *TargetMachine;
     void InitializeNative();
 
@@ -13,11 +14,12 @@ public:
         InitializeNative();
     }
 
-    ~NativeCodeGenVisitor() {
+    ~NativeCodeGenVisitor()
+    {
         // it seems that there are memory leaks in TargetMachine
         // delete here to avoid the leaks
         delete TargetMachine;
     }
 
-    void emit(const std::string& filename) const;
+    void emit(const std::string &filename) const;
 };

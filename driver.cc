@@ -23,7 +23,7 @@ int driver::parse(const std::string &f)
 
 void driver::codegen()
 {
-    CodeGenVisitor v;
+    CodeGenVisitor v(true);
     for (auto &expr : ast)
         v.visit(*expr);
     v.dump();
@@ -36,7 +36,4 @@ void driver::codegen()
     for (auto &expr : ast)
         n.visit(*expr);
     n.emit("output.o");
-
-    for (auto &expr : ast)
-        expr->dump(std::cout, 0);
 }

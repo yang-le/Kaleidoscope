@@ -50,6 +50,9 @@ public:
     virtual void accept(ExprASTVisitor &v) const = 0;
 
     virtual std::ostream &dump(std::ostream &out, int ind) const;
+
+    unsigned getLine() const { return Loc.begin.line; }
+    unsigned getCol() const { return Loc.begin.column; }
 };
 
 class NumberExprAST : public ExprAST

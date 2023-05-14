@@ -14,6 +14,7 @@
 #include "llvm/IR/Module.h"
 #include "llvm/IR/Type.h"
 #include "llvm/IR/Verifier.h"
+#include "llvm/Support/Host.h"
 #include "llvm/Target/TargetMachine.h"
 #include "llvm/Transforms/InstCombine/InstCombine.h"
 #include "llvm/Transforms/Scalar.h"
@@ -140,26 +141,72 @@ void CodeGenVisitor::visit(const FunctionAST &f)
     BasicBlock *BB = BasicBlock::Create(*TheContext, "entry", TheFunction);
     Builder->SetInsertPoint(BB);
 
+    DIFile *Unit = nullptr;
+    DISubprogram *SP = nullptr;
+    unsigned LineNo = Proto.getLine();
+    if (debug_)
+    {
+        Unit = DBuilder->createFile(
+            KSDbgInfo.TheCU->getFilename(), KSDbgInfo.TheCU->getDirectory());
+
+        DIScope *FContext = Unit;
+        unsigned ScopeLine = LineNo;
+        SP = DBuilder->createFunction(
+            FContext, Proto.getName(), StringRef(), Unit, LineNo,
+            CreateFunctionType(TheFunction->arg_size()), ScopeLine,
+            DINode::FlagPrototyped, DISubprogram::SPFlagDefinition);
+        TheFunction->setSubprogram(SP);
+
+        KSDbgInfo.LexicalBlocks.push_back(SP);
+
+        // Unset the location for the prologue emission
+        emitLocation(nullptr);
+    }
+
     NamedValues.clear();
+    unsigned ArgIdx = 0;
     for (auto &Arg : TheFunction->args())
     {
         AllocaInst *Alloca = CreateEntryBlockAlloca(TheFunction, std::string(Arg.getName()));
+        if (debug_)
+        {
+            DILocalVariable *D = DBuilder->createParameterVariable(
+                SP, Arg.getName(), ++ArgIdx, Unit, LineNo, getDoubleTy(), true);
+            DBuilder->insertDeclare(
+                Alloca, D, DBuilder->createExpression(),
+                DILocation::get(SP->getContext(), LineNo, 0, SP),
+                // let's try to see if this is the right point
+                Builder->GetInsertBlock());
+        }
         Builder->CreateStore(&Arg, Alloca);
         NamedValues[std::string(Arg.getName())] = Alloca;
     }
+
+    if (debug_)
+        emitLocation(&f.getBody());
 
     visit(f.getBody());
     if (Value_)
     {
         Builder->CreateRet(Value_);
+
+        if (debug_)
+            KSDbgInfo.LexicalBlocks.pop_back();
+
         verifyFunction(*TheFunction);
-        TheFPM->run(*TheFunction);
+
+        if (TheFPM)
+            TheFPM->run(*TheFunction);
 
         Value_ = TheFunction;
         return;
     }
 
     TheFunction->eraseFromParent();
+
+    if (debug_)
+        KSDbgInfo.LexicalBlocks.pop_back();
+
     Value_ = nullptr;
 }
 
@@ -353,13 +400,62 @@ void CodeGenVisitor::InitializeModuleAndPassManager()
 
     Builder = std::make_unique<IRBuilder<>>(*TheContext);
 
-    TheFPM = std::make_unique<legacy::FunctionPassManager>(TheModule.get());
+    if (debug_)
+    {
+        TheModule->addModuleFlag(Module::Warning, "Debug Info Version", DEBUG_METADATA_VERSION);
+        if (Triple(sys::getProcessTriple()).isOSDarwin())
+            TheModule->addModuleFlag(Module::Warning, "Dwarf Version", 2);
 
-    TheFPM->add(createPromoteMemoryToRegisterPass());
-    TheFPM->add(createInstructionCombiningPass());
-    TheFPM->add(createReassociatePass());
-    TheFPM->add(createGVNPass());
-    TheFPM->add(createCFGSimplificationPass());
+        DBuilder = std::make_unique<DIBuilder>(*TheModule);
+        KSDbgInfo.TheCU = DBuilder->createCompileUnit(
+            dwarf::DW_LANG_C, DBuilder->createFile("fib.ks", "."), "Kaleidoscope Compiler", false, "", 0);
+    }
+    else
+    {
+        TheFPM = std::make_unique<legacy::FunctionPassManager>(TheModule.get());
 
-    TheFPM->doInitialization();
+        TheFPM->add(createPromoteMemoryToRegisterPass());
+        TheFPM->add(createInstructionCombiningPass());
+        TheFPM->add(createReassociatePass());
+        TheFPM->add(createGVNPass());
+        TheFPM->add(createCFGSimplificationPass());
+
+        TheFPM->doInitialization();
+    }
+}
+
+DISubroutineType *CodeGenVisitor::CreateFunctionType(unsigned NumArgs)
+{
+    SmallVector<Metadata *, 8> EltTys;
+    DIType *DblTy = getDoubleTy();
+
+    EltTys.push_back(DblTy);
+
+    for (unsigned i = 0; i < NumArgs; ++i)
+        EltTys.push_back(DblTy);
+
+    return DBuilder->createSubroutineType(DBuilder->getOrCreateTypeArray(EltTys));
+}
+
+DIType *CodeGenVisitor::getDoubleTy()
+{
+    if (KSDbgInfo.DblTy)
+        return KSDbgInfo.DblTy;
+
+    KSDbgInfo.DblTy = DBuilder->createBasicType("double", 64, dwarf::DW_ATE_float);
+    return KSDbgInfo.DblTy;
+}
+
+void CodeGenVisitor::emitLocation(const ExprAST *AST)
+{
+    if (!AST)
+        return Builder->SetCurrentDebugLocation(DebugLoc());
+
+    DIScope *Scope;
+    if (KSDbgInfo.LexicalBlocks.empty())
+        Scope = KSDbgInfo.TheCU;
+    else
+        Scope = KSDbgInfo.LexicalBlocks.back();
+
+    Builder->SetCurrentDebugLocation(DILocation::get(Scope->getContext(), AST->getLine(), AST->getCol(), Scope));
 }
