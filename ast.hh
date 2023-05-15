@@ -1,11 +1,11 @@
 #pragma once
 
+#include "location.hh"
 #include <cassert>
-#include <string>
-#include <vector>
 #include <memory>
 #include <ostream>
-#include "location.hh"
+#include <string>
+#include <vector>
 
 class ExprAST;
 class NumberExprAST;

@@ -1,8 +1,8 @@
 #include "driver.hh"
-#include "parser.hh"
 #include "CodeGenVisitor.hh"
 #include "JITCodeGenVisitor.hh"
 #include "NativeCodeGenVisitor.hh"
+#include "parser.hh"
 
 driver::driver()
     : trace_parsing(false), trace_scanning(false)

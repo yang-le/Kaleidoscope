@@ -1,9 +1,9 @@
 #pragma once
 
-#include <string>
-#include <map>
-#include "parser.hh"
 #include "ast.hh"
+#include "parser.hh"
+#include <map>
+#include <string>
 
 #define YY_DECL \
     yy::parser::symbol_type yylex(driver &drv)

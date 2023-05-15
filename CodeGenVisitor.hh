@@ -1,14 +1,14 @@
 #pragma once
 
-#include <map>
 #include "ast.hh"
+#include <map>
 
-#include "llvm/Support/Error.h"
-#include "llvm/IR/LLVMContext.h"
-#include "llvm/IR/Module.h"
 #include "llvm/IR/DIBuilder.h"
 #include "llvm/IR/IRBuilder.h"
+#include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/LegacyPassManager.h"
+#include "llvm/IR/Module.h"
+#include "llvm/Support/Error.h"
 
 class CodeGenVisitor : public ExprASTVisitor
 {
@@ -42,7 +42,7 @@ public:
         InitializeModuleAndPassManager();
     }
 
-    virtual void visit(const ExprAST &e) { e.accept(*this); }
+    virtual void visit(const ExprAST &e) override { e.accept(*this); }
     virtual void visit(const NumberExprAST &n) override;
     virtual void visit(const VariableExprAST &v) override;
     virtual void visit(const BinaryExprAST &b) override;

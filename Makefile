@@ -2,7 +2,7 @@ BASE = test
 BISON = bison
 FLEX = flex
 
-CXXFLAGS = -std=c++17 -I/usr/lib/llvm-12/include
+CXXFLAGS = `llvm-config-12 --cxxflags` -std=c++17
 CXXFLAGS += -g -fsanitize=leak -fsanitize=address
 
 all: $(BASE)

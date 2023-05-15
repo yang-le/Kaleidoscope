@@ -47,7 +47,7 @@ blank   [[:blank:]\r]
 ","                     return yy::parser::make_COMMA(loc);
 "<"                     return yy::parser::make_LT(loc);
 [[:punct:]]             return yy::parser::make_PUNCT(yytext[0], loc);
-.                       throw yy::parser::syntax_error(loc, "invalid character: " + std::string(yytext));
+.                       std::cerr << loc << "invalid character: " << yytext << std::endl;
 <<EOF>>                 return yy::parser::make_END(loc);
 %%
 
