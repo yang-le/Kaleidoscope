@@ -4,13 +4,13 @@
 #include "llvm/ExecutionEngine/Orc/CompileOnDemandLayer.h"
 #include "llvm/ExecutionEngine/Orc/CompileUtils.h"
 #include "llvm/ExecutionEngine/Orc/Core.h"
+#include "llvm/ExecutionEngine/Orc/EPCIndirectionUtils.h"
 #include "llvm/ExecutionEngine/Orc/ExecutionUtils.h"
+#include "llvm/ExecutionEngine/Orc/ExecutorProcessControl.h"
 #include "llvm/ExecutionEngine/Orc/IRCompileLayer.h"
 #include "llvm/ExecutionEngine/Orc/IRTransformLayer.h"
 #include "llvm/ExecutionEngine/Orc/JITTargetMachineBuilder.h"
 #include "llvm/ExecutionEngine/Orc/RTDyldObjectLinkingLayer.h"
-#include "llvm/ExecutionEngine/Orc/TPCIndirectionUtils.h"
-#include "llvm/ExecutionEngine/Orc/TargetProcessControl.h"
 #include "llvm/ExecutionEngine/SectionMemoryManager.h"
 #include "llvm/IR/DataLayout.h"
 #include "llvm/IR/LLVMContext.h"
@@ -25,7 +25,7 @@ namespace llvm::orc
     {
     private:
         std::unique_ptr<ExecutionSession> ES;
-        std::unique_ptr<TPCIndirectionUtils> TPCIU;
+        std::unique_ptr<EPCIndirectionUtils> EPCIU;
 
         DataLayout DL;
         MangleAndInterner Mangle;
@@ -44,14 +44,14 @@ namespace llvm::orc
         }
 
     public:
-        KaleidoscopeJIT(std::unique_ptr<ExecutionSession> ES, std::unique_ptr<TPCIndirectionUtils> TPCIU, JITTargetMachineBuilder JTMB, DataLayout DL)
-            : ES(std::move(ES)), TPCIU(std::move(TPCIU)), DL(std::move(DL)), Mangle(*this->ES, this->DL),
+        KaleidoscopeJIT(std::unique_ptr<ExecutionSession> ES, std::unique_ptr<EPCIndirectionUtils> EPCIU, JITTargetMachineBuilder JTMB, DataLayout DL)
+            : ES(std::move(ES)), EPCIU(std::move(EPCIU)), DL(std::move(DL)), Mangle(*this->ES, this->DL),
               ObjectLayer(*this->ES, []()
                           { return std::make_unique<SectionMemoryManager>(); }),
               CompileLayer(*this->ES, ObjectLayer, std::make_unique<ConcurrentIRCompiler>(std::move(JTMB))),
               OptimizeLayer(*this->ES, CompileLayer, optimizeModule),
-              CODLayer(*this->ES, OptimizeLayer, this->TPCIU->getLazyCallThroughManager(), [this]
-                       { return this->TPCIU->createIndirectStubsManager(); }),
+              CODLayer(*this->ES, OptimizeLayer, this->EPCIU->getLazyCallThroughManager(), [this]
+                       { return this->EPCIU->createIndirectStubsManager(); }),
               MainJD(this->ES->createBareJITDylib("<main>"))
         {
             MainJD.addGenerator(cantFail(DynamicLibrarySearchGenerator::GetForCurrentProcess(DL.getGlobalPrefix())));
@@ -62,35 +62,34 @@ namespace llvm::orc
             if (auto Err = ES->endSession())
                 ES->reportError(std::move(Err));
 
-            if (auto Err = TPCIU->cleanup())
+            if (auto Err = EPCIU->cleanup())
                 ES->reportError(std::move(Err));
         }
 
         static Expected<std::unique_ptr<KaleidoscopeJIT>> Create()
         {
-            auto SSP = std::make_shared<SymbolStringPool>();
-            auto TPC = SelfTargetProcessControl::Create(SSP);
-            if (!TPC)
-                return TPC.takeError();
+            auto EPC = SelfExecutorProcessControl::Create();
+            if (!EPC)
+                return EPC.takeError();
 
-            auto ES = std::make_unique<ExecutionSession>(std::move(SSP));
+            auto ES = std::make_unique<ExecutionSession>(std::move(*EPC));
 
-            auto TPCIU = TPCIndirectionUtils::Create(**TPC);
-            if (!TPCIU)
-                return TPCIU.takeError();
+            auto EPCIU = EPCIndirectionUtils::Create(ES->getExecutorProcessControl());
+            if (!EPCIU)
+                return EPCIU.takeError();
 
-            (*TPCIU)->createLazyCallThroughManager(*ES, pointerToJITTargetAddress(&handleLazyCallThroughError));
+            (*EPCIU)->createLazyCallThroughManager(*ES, ExecutorAddr::fromPtr(&handleLazyCallThroughError));
 
-            if (auto Err = setUpInProcessLCTMReentryViaTPCIU(**TPCIU))
+            if (auto Err = setUpInProcessLCTMReentryViaEPCIU(**EPCIU))
                 return std::move(Err);
 
-            JITTargetMachineBuilder JTMB((*TPC)->getTargetTriple());
+            JITTargetMachineBuilder JTMB(ES->getExecutorProcessControl().getTargetTriple());
 
             auto DL = JTMB.getDefaultDataLayoutForTarget();
             if (!DL)
                 return DL.takeError();
 
-            return std::make_unique<KaleidoscopeJIT>(std::move(ES), std::move(*TPCIU), std::move(JTMB), std::move(*DL));
+            return std::make_unique<KaleidoscopeJIT>(std::move(ES), std::move(*EPCIU), std::move(JTMB), std::move(*DL));
         }
 
         const DataLayout &getDataLayout() const { return DL; }
@@ -102,10 +101,10 @@ namespace llvm::orc
             if (!RT)
                 RT = MainJD.getDefaultResourceTracker();
 
-            return OptimizeLayer.add(RT, std::move(TSM));
+            return CODLayer.add(RT, std::move(TSM));
         }
 
-        Expected<JITEvaluatedSymbol> lookup(StringRef Name)
+        Expected<ExecutorSymbolDef> lookup(StringRef Name)
         {
             return ES->lookup({&MainJD}, Mangle(Name));
         }

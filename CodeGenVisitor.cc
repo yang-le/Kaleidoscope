@@ -14,8 +14,8 @@
 #include "llvm/IR/Module.h"
 #include "llvm/IR/Type.h"
 #include "llvm/IR/Verifier.h"
-#include "llvm/Support/Host.h"
 #include "llvm/Target/TargetMachine.h"
+#include "llvm/TargetParser/Host.h"
 #include "llvm/Transforms/InstCombine/InstCombine.h"
 #include "llvm/Transforms/Scalar.h"
 #include "llvm/Transforms/Scalar/GVN.h"
@@ -237,7 +237,7 @@ void CodeGenVisitor::visit(const IfExprAST &i)
     Builder->CreateBr(MergeBB);
     ThenBB = Builder->GetInsertBlock();
 
-    TheFunction->getBasicBlockList().push_back(ElseBB);
+    TheFunction->insert(TheFunction->end(), ElseBB);
     Builder->SetInsertPoint(ElseBB);
 
     visit(i.getElse());
@@ -248,7 +248,7 @@ void CodeGenVisitor::visit(const IfExprAST &i)
     Builder->CreateBr(MergeBB);
     ElseBB = Builder->GetInsertBlock();
 
-    TheFunction->getBasicBlockList().push_back(MergeBB);
+    TheFunction->insert(TheFunction->end(), MergeBB);
     Builder->SetInsertPoint(MergeBB);
 
     PHINode *PN = Builder->CreatePHI(Type::getDoubleTy(*TheContext), 2, "if");
@@ -331,8 +331,6 @@ void CodeGenVisitor::visit(const AssignExprAST &f)
         std::cerr << "Unknown variable name: " << f.getVarName() << '\n';
 
     Builder->CreateStore(Value_, A);
-
-    Value_ = A;
 }
 
 void CodeGenVisitor::visit(const VarExprAST &a)

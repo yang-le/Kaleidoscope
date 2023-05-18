@@ -4,7 +4,6 @@
 
 %define api.token.constructor
 %define api.value.type variant
-%define parse.assert
 
 %code requires {
   #include <string>

@@ -1,8 +1,9 @@
 BASE = test
 BISON = bison
 FLEX = flex
+CXX = clang++-12
 
-CXXFLAGS = `llvm-config-12 --cxxflags` -std=c++17
+CXXFLAGS = `llvm-config --cxxflags`
 CXXFLAGS += -g -fsanitize=leak -fsanitize=address
 
 all: $(BASE)
@@ -13,11 +14,15 @@ all: $(BASE)
 %.cc: %.ll
 	$(FLEX) $(FLEXFLAGS) -o $@ $<
 
+%.cc %.hh: %.td
+	mlir-tblgen -gen-dialect-decls -I/home/yangle/llvm-project/mlir/include -o $*.hh $<
+	mlir-tblgen -gen-dialect-defs -I/home/yangle/llvm-project/mlir/include -o $*.cc $<
+
 %.o: %.cc
 	$(CXX) $(CXXFLAGS) -c -o $@ $<
 
 $(BASE): parser.o scanner.o ast.o CodeGenVisitor.o JITCodeGenVisitor.o NativeCodeGenVisitor.o driver.o $(BASE).o
-	$(CXX) $(CXXFLAGS) `llvm-config-12 --ldflags` -o $@ $^ `llvm-config-12 --libs`
+	$(CXX) -fuse-ld=lld $(CXXFLAGS) `llvm-config --ldflags` -o $@ $^ `llvm-config --libs` -pthread -lz -ldl -lncurses
 
 $(BASE).o: parser.hh
 parser.o: parser.hh

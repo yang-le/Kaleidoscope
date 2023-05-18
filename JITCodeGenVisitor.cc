@@ -21,9 +21,8 @@ void JITCodeGenVisitor::visit(const FunctionAST &f)
         if ("__anon_expr" == f.getProto().getName())
         {
             auto ExprSymbol = ExitOnErr(TheJIT->lookup("__anon_expr"));
-            assert(ExprSymbol && "Function not found");
 
-            double (*FP)() = (double (*)())(intptr_t)ExprSymbol.getAddress();
+            double (*FP)() = ExprSymbol.getAddress().toPtr<double (*)()>();
             std::cout << "Evaluated to " << FP() << '\n';
 
             ExitOnErr(RT->remove());
