@@ -331,8 +331,6 @@ void CodeGenVisitor::visit(const AssignExprAST &f)
         std::cerr << "Unknown variable name: " << f.getVarName() << '\n';
 
     Builder->CreateStore(Value_, A);
-
-    Value_ = A;
 }
 
 void CodeGenVisitor::visit(const VarExprAST &a)
