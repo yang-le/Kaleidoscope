@@ -14,10 +14,6 @@ all: $(BASE)
 %.cc: %.ll
 	$(FLEX) $(FLEXFLAGS) -o $@ $<
 
-%.cc %.hh: %.td
-	mlir-tblgen -gen-dialect-decls -I/home/yangle/llvm-project/mlir/include -o $*.hh $<
-	mlir-tblgen -gen-dialect-defs -I/home/yangle/llvm-project/mlir/include -o $*.cc $<
-
 %.o: %.cc
 	$(CXX) $(CXXFLAGS) -c -o $@ $<
 
