@@ -6,3 +6,6 @@ scanner.cc
 location.hh
 test
 test.txt
+build
+compile_flags.txt
+tablegen_compile_commands.yml
