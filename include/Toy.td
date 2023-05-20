@@ -1,5 +1,5 @@
-#ifndef TOY_OPS
-#define TOY_OPS
+#ifndef TOY
+#define TOY
 
 include "mlir/IR/OpBase.td"
 include "mlir/IR/FunctionInterfaces.td"
@@ -77,4 +77,4 @@ def MulOp : Toy_Op<"mul"> {
     ];
 }
 
-#endif // TOY_OPS
+#endif // TOY

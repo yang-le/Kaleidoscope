@@ -5,11 +5,22 @@ set(CMAKE_BUILD_WITH_INSTALL_NAME_DIR ON)
 
 set(CMAKE_CXX_STANDARD 17 CACHE STRING "C++ standard to conform to")
 
+find_package(BISON)
+find_package(FLEX)
+
+BISON_TARGET(Parser parser.yy ${CMAKE_CURRENT_BINARY_DIR}/parser.cc)
+FLEX_TARGET(Scanner scanner.ll ${CMAKE_CURRENT_BINARY_DIR}/scanner.cc)
+ADD_FLEX_BISON_DEPENDENCY(Scanner Parser)
+
+include_directories(${CMAKE_CURRENT_SOURCE_DIR})
+include_directories(${CMAKE_CURRENT_BINARY_DIR})
+
 find_package(MLIR REQUIRED CONFIG)
 
 message(STATUS "Using MLIRConfig.cmake in: ${MLIR_DIR}")
 message(STATUS "Using LLVMConfig.cmake in: ${LLVM_DIR}")
 
+set(LLVM_ENABLE_LLD ON)
 set(LLVM_RUNTIME_OUTPUT_INTDIR ${CMAKE_BINARY_DIR}/bin)
 set(LLVM_LIBRARY_OUTPUT_INTDIR ${CMAKE_BINARY_DIR}/lib)
 set(MLIR_BINARY_DIR ${CMAKE_BINARY_DIR})
@@ -27,11 +38,26 @@ if(MLIR_ENABLE_BINDINGS_PYTHON)
     mlir_configure_python_dev_packages()
 endif()
 
-set(STANDALONE_SOURCE_DIR ${PROJECT_SOURCE_DIR})
-set(STANDALONE_BINARY_DIR ${PROJECT_BINARY_DIR})
+set(TOY_SOURCE_DIR ${PROJECT_SOURCE_DIR})
+set(TOY_BINARY_DIR ${PROJECT_BINARY_DIR})
 include_directories(${LLVM_INCLUDE_DIRS})
 include_directories(${MLIR_INCLUDE_DIRS})
-include_directories(${STANDALONE_SOURCE_DIR}/include)
-include_directories(${STANDALONE_BINARY_DIR}/include)
+include_directories(${TOY_SOURCE_DIR}/include)
+include_directories(${TOY_BINARY_DIR}/include)
 link_directories(${LLVM_BUILD_LIBRARY_DIR})
 add_definitions(${LLVM_DEFINITIONS})
+
+add_subdirectory(include)
+add_subdirectory(lib)
+
+get_property(dialect_libs GLOBAL PROPERTY MLIR_DIALECT_LIBS)
+get_property(conversion_libs GLOBAL PROPERTY MLIR_CONVERSION_LIBS)
+set(LIBS ${dialect_libs} ${conversion_libs} MLIRArithDialect MLIROptLib MLIRToy)
+
+set(LLVM_LINK_COMPONENTS Core Support OrcJIT native)
+add_llvm_executable(toy ${BISON_Parser_OUTPUTS} ${FLEX_Scanner_OUTPUTS} test.cc driver.cc ast.cc CodeGenVisitor.cc NativeCodeGenVisitor.cc JITCodeGenVisitor.cc)
+
+llvm_update_compile_flags(toy)
+target_link_libraries(toy PRIVATE ${LIBS})
+
+mlir_check_all_link_libraries(toy)

@@ -6,7 +6,7 @@
 #include "mlir/Interfaces/CallInterfaces.h"
 #include "mlir/Interfaces/SideEffectInterfaces.h"
 
-#include "Dialect.hh.inc"
+#include "ToyDialect.h.inc"
 
 #define GET_OP_CLASSES
-#include "Ops.hh.inc"
+#include "Toy.h.inc"
