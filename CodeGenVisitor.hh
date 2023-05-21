@@ -31,7 +31,6 @@ class CodeGenVisitor : public ExprASTVisitor
         std::vector<llvm::DIScope *> LexicalBlocks;
     } KSDbgInfo;
 
-    llvm::DIType *getDoubleTy();
     void emitLocation(const ExprAST *AST);
     llvm::DISubroutineType *CreateFunctionType(unsigned NumArgs);
 

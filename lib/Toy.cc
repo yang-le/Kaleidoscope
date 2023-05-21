@@ -1,4 +1,5 @@
 #include "Toy.hh"
+#include "mlir/IR/OpImplementation.h"
 
 using namespace mlir;
 using namespace mlir::toy;
@@ -12,3 +13,6 @@ void ToyDialect::initialize()
 #include "Toy.cpp.inc"
         >();
 }
+
+#define GET_OP_CLASSES
+#include "Toy.cpp.inc"
