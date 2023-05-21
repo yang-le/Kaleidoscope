@@ -25,6 +25,9 @@ using namespace llvm;
 
 void CodeGenVisitor::visit(const NumberExprAST &n)
 {
+    if (debug_)
+        emitLocation(&n);
+
     Value_ = ConstantFP::get(*TheContext, APFloat(n.getVal()));
 }
 
@@ -38,11 +41,17 @@ void CodeGenVisitor::visit(const VariableExprAST &v)
         return;
     }
 
+    if (debug_)
+        emitLocation(&v);
+
     Value_ = Builder->CreateLoad(A->getAllocatedType(), A, v.getName());
 }
 
 void CodeGenVisitor::visit(const BinaryExprAST &b)
 {
+    if (debug_)
+        emitLocation(&b);
+
     visit(b.getLHS());
     Value *L = Value_;
 
@@ -84,6 +93,9 @@ void CodeGenVisitor::visit(const BinaryExprAST &b)
 
 void CodeGenVisitor::visit(const CallExprAST &c)
 {
+    if (debug_)
+        emitLocation(&c);
+
     Function *CalleeF = getFunction(c.getCallee());
     if (!CalleeF)
     {
@@ -171,11 +183,10 @@ void CodeGenVisitor::visit(const FunctionAST &f)
         if (debug_)
         {
             DILocalVariable *D = DBuilder->createParameterVariable(
-                SP, Arg.getName(), ++ArgIdx, Unit, LineNo, getDoubleTy(), true);
+                SP, Arg.getName(), ++ArgIdx, Unit, LineNo, KSDbgInfo.DblTy, true);
             DBuilder->insertDeclare(
                 Alloca, D, DBuilder->createExpression(),
                 DILocation::get(SP->getContext(), LineNo, 0, SP),
-                // let's try to see if this is the right point
                 Builder->GetInsertBlock());
         }
         Builder->CreateStore(&Arg, Alloca);
@@ -212,6 +223,9 @@ void CodeGenVisitor::visit(const FunctionAST &f)
 
 void CodeGenVisitor::visit(const IfExprAST &i)
 {
+    if (debug_)
+        emitLocation(&i);
+
     visit(i.getCond());
     Value *CondV = Value_;
     if (!CondV)
@@ -259,6 +273,9 @@ void CodeGenVisitor::visit(const IfExprAST &i)
 
 void CodeGenVisitor::visit(const ForExprAST &f)
 {
+    if (debug_)
+        emitLocation(&f);
+
     Function *TheFunction = Builder->GetInsertBlock()->getParent();
     AllocaInst *Alloca = CreateEntryBlockAlloca(TheFunction, f.getVarName());
 
@@ -305,7 +322,6 @@ void CodeGenVisitor::visit(const ForExprAST &f)
 
     EndCond = Builder->CreateFCmpONE(EndCond, ConstantFP::get(*TheContext, APFloat(0.0)), "loopcond");
 
-    BasicBlock *LoopEndBB = Builder->GetInsertBlock();
     BasicBlock *AfterBB = BasicBlock::Create(*TheContext, "afterloop", TheFunction);
 
     Builder->CreateCondBr(EndCond, LoopBB, AfterBB);
@@ -322,6 +338,9 @@ void CodeGenVisitor::visit(const ForExprAST &f)
 
 void CodeGenVisitor::visit(const AssignExprAST &f)
 {
+    if (debug_)
+        emitLocation(&f);
+
     visit(f.getRHS());
     if (!Value_)
         return;
@@ -358,6 +377,9 @@ void CodeGenVisitor::visit(const VarExprAST &a)
         OldBindings.push_back(NamedValues[VarName]);
         NamedValues[VarName] = Alloca;
     }
+
+    if (debug_)
+        emitLocation(&a);
 
     visit(a.getBody());
     if (!Value_)
@@ -407,6 +429,7 @@ void CodeGenVisitor::InitializeModuleAndPassManager()
         DBuilder = std::make_unique<DIBuilder>(*TheModule);
         KSDbgInfo.TheCU = DBuilder->createCompileUnit(
             dwarf::DW_LANG_C, DBuilder->createFile("fib.ks", "."), "Kaleidoscope Compiler", false, "", 0);
+        KSDbgInfo.DblTy = DBuilder->createBasicType("double", 64, dwarf::DW_ATE_float);
     }
     else
     {
@@ -425,23 +448,13 @@ void CodeGenVisitor::InitializeModuleAndPassManager()
 DISubroutineType *CodeGenVisitor::CreateFunctionType(unsigned NumArgs)
 {
     SmallVector<Metadata *, 8> EltTys;
-    DIType *DblTy = getDoubleTy();
 
-    EltTys.push_back(DblTy);
+    EltTys.push_back(KSDbgInfo.DblTy);
 
     for (unsigned i = 0; i < NumArgs; ++i)
-        EltTys.push_back(DblTy);
+        EltTys.push_back(KSDbgInfo.DblTy);
 
     return DBuilder->createSubroutineType(DBuilder->getOrCreateTypeArray(EltTys));
-}
-
-DIType *CodeGenVisitor::getDoubleTy()
-{
-    if (KSDbgInfo.DblTy)
-        return KSDbgInfo.DblTy;
-
-    KSDbgInfo.DblTy = DBuilder->createBasicType("double", 64, dwarf::DW_ATE_float);
-    return KSDbgInfo.DblTy;
 }
 
 void CodeGenVisitor::emitLocation(const ExprAST *AST)
